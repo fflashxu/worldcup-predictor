@@ -339,7 +339,10 @@ export default function App() {
                   <div className={`${col.color} font-semibold mb-1.5`}>{col.label}</div>
                   <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
                     {col.items?.map((x: any) => (
-                      <div key={x.name} className="truncate">{flag(x.name)} {x.name}</div>
+                      <div key={x.name} className="truncate">
+                        <span className="text-[10px] text-slate-400 mr-0.5">{x.group}组</span>
+                        {flag(x.name)} {x.name}
+                      </div>
                     ))}
                   </div>
                 </div>
