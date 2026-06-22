@@ -112,14 +112,23 @@ predictRouter.post('/predict/ds/:matchId', async (req: Request, res: Response) =
   for (let v = 1; v <= 3; v++) {
     let tries = 0;
     let pred;
-    const riskContext = riskAngles[v - 1];
-    while (tries < 5) {
+    let temp = [0.3, 0.7, 1.1][v - 1];
+    while (tries < 8) {
       try {
-        pred = await predictMatch(match, existingResults, riskAngles[v-1]);
-        const key = `${pred.homeScore}-${pred.awayScore}`;
+        pred = await predictMatch(match, existingResults, riskAngles[v-1], temp);
+        let key = `${pred.homeScore}-${pred.awayScore}`;
+        // Force uniqueness: if duplicate, perturb score by ±1
+        if (dsResults.has(key)) {
+          const alts = [[pred.homeScore+1,pred.awayScore],[Math.max(0,pred.homeScore-1),pred.awayScore],
+            [pred.homeScore,pred.awayScore+1],[pred.homeScore,Math.max(0,pred.awayScore-1)]];
+          for (const [h,a] of alts) {
+            const k2 = `${h}-${a}`;
+            if (!dsResults.has(k2)) { pred.homeScore = h as number; pred.awayScore = a as number; key = k2; break; }
+          }
+        }
         if (!dsResults.has(key)) { dsResults.add(key); break; }
-      } catch (e) { console.error(`DS v${v} try${tries} failed:`, e); }
-      tries++;
+      } catch (e) { console.error(`DS v${v} failed:`, e); }
+      tries++; temp = Math.min(1.5, temp + 0.15);
     }
     if (pred) {
       const p = await prisma.prediction.upsert({

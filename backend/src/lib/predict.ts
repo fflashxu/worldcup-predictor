@@ -83,16 +83,16 @@ function buildStandings(matches: Match[]) {
   return standings;
 }
 
-export async function predictMatch(match: Match, existingResults: Match[], riskContext?: string): Promise<MatchPrediction> {
+export async function predictMatch(match: Match, existingResults: Match[], riskContext?: string, temperature?: number): Promise<MatchPrediction> {
   const context = buildContextPrompt(existingResults);
   const riskPrompt = riskContext || '';
 
   const response = await client.chat.completions.create({
     model: MODEL,
+    temperature: temperature ?? 0.7,
     messages: [{
       role: 'system',
       content: `You are a World Cup prediction expert. Analyze the provided real tournament data and predict match outcomes.
-${riskPrompt}
 
 Output ONLY valid JSON in this format:
 {
@@ -109,10 +109,12 @@ Base predictions on: current form (from results above), head-to-head history, gr
 ALL factual data in the context above comes from real-time API — do not use any training data.`,
     }, {
       role: 'user',
-      content: `${context}\n\nPredict this match: ${match.home} vs ${match.away} (${match.round}${match.group ? ' Group ' + match.group : ''}, Match ${match.id})`,
+      content: `${context}
+
+${riskPrompt ? `[预测风格: ${riskPrompt}]` : ''}
+
+Predict this match: ${match.home} vs ${match.away} (${match.round}${match.group ? ' Group ' + match.group : ''}, Match ${match.id})`,
     }],
-    temperature: 0.7,
-    response_format: { type: 'json_object' },
   });
 
   const raw = JSON.parse(response.choices[0]?.message?.content || '{}');
