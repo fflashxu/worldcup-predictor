@@ -92,15 +92,30 @@ predictRouter.post('/predict/ds/:matchId', async (req: Request, res: Response) =
     return r ? { ...m, homeScore: r.homeScore, awayScore: r.awayScore } : m;
   });
 
-  // DS: up to 3 retries to get different predictions
+  // DS predictions anchored to 中国体彩 odds (independent data source)
+  const { fetchOdds } = await import('../lib/odds');
+  const lotteryOdds = await fetchOdds();
+  const oddsKey = `${match.home}::${match.away}`;
+  const odds = lotteryOdds[oddsKey];
+  const oddsStr = odds
+    ? `中国体彩赔率: 主胜${odds.homeWin}%/平${odds.draw}%/客胜${odds.awayWin}%` + (odds.handicapGoalLine ? ` 让球${odds.handicapGoalLine}(${odds.handicapOdds})` : '')
+    : '暂无赔率数据';
+
+  const riskAngles = [
+    `CONSERVATIVE (V1): ${oddsStr}。根据赔率做出最稳妥、最符合市场共识的预测。`,
+    `BALANCED (V2): ${oddsStr}。综合所有可能性做出均衡预测，不盲从赔率。`,
+    `AGGRESSIVE (V3): ${oddsStr}。赔率可能低估了某一方——大胆预测冷门或意外比分。`,
+  ];
+
   const dsResults = new Set<string>();
   const preds = [];
   for (let v = 1; v <= 3; v++) {
     let tries = 0;
     let pred;
+    const riskContext = riskAngles[v - 1];
     while (tries < 5) {
       try {
-        pred = await predictMatch(match, existingResults);
+        pred = await predictMatch(match, existingResults, riskAngles[v-1]);
         const key = `${pred.homeScore}-${pred.awayScore}`;
         if (!dsResults.has(key)) { dsResults.add(key); break; }
       } catch (e) { console.error(`DS v${v} try${tries} failed:`, e); }
@@ -112,7 +127,7 @@ predictRouter.post('/predict/ds/:matchId', async (req: Request, res: Response) =
         update: { homeScore: pred.homeScore, awayScore: pred.awayScore },
         create: { matchId, homeScore: pred.homeScore, awayScore: pred.awayScore, predictedBy: 'ds', variant: v, tournamentRound: 'GROUP' },
       });
-      preds.push({ variant: v, homeScore: p.homeScore, awayScore: p.awayScore });
+      preds.push({ variant: v, homeScore: p.homeScore, awayScore: p.awayScore, risk: riskAngles[v-1].split(':')[0].trim() });
     }
   }
   res.json({ matchId, predictions: preds });

@@ -83,14 +83,16 @@ function buildStandings(matches: Match[]) {
   return standings;
 }
 
-export async function predictMatch(match: Match, existingResults: Match[]): Promise<MatchPrediction> {
+export async function predictMatch(match: Match, existingResults: Match[], riskContext?: string): Promise<MatchPrediction> {
   const context = buildContextPrompt(existingResults);
+  const riskPrompt = riskContext || '';
 
   const response = await client.chat.completions.create({
     model: MODEL,
     messages: [{
       role: 'system',
       content: `You are a World Cup prediction expert. Analyze the provided real tournament data and predict match outcomes.
+${riskPrompt}
 
 Output ONLY valid JSON in this format:
 {
