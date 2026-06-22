@@ -11,20 +11,21 @@ interface Prediction { id: string; matchId: string; homeScore: number; awayScore
 interface Match { id: string; round: string; group?: string; home: string | null; away: string | null; homeScore?: number; awayScore?: number; completed?: boolean; }
 
 function GroupCard({ letter, teams, standings }: { letter: string; teams: string[]; standings?: Standing[] }) {
+  // Sort by standings position (pts desc), fall back to original order
+  const sorted = standings
+    ? [...standings].sort((a, b) => a.position - b.position)
+    : teams.map((name, i) => ({ name, pts: 0, gd: 0, gf: 0, played: 0, position: i + 1 }) as Standing);
   return (
     <div className="bg-white rounded-lg border border-slate-200 shadow-sm overflow-hidden">
       <div className="bg-sky-600 text-white text-center py-1 text-sm font-bold">{letter} 组</div>
-      {teams.map((name, i) => {
-        const s = standings?.find(t => t.name === name);
-        return (
-          <div key={name} className={`flex items-center gap-1 px-2 py-1 text-xs ${i < 2 ? 'bg-emerald-50/60' : i === 2 ? 'bg-amber-50/40' : ''}`}>
-            <span className="w-3 text-slate-400 text-[10px]">{i + 1}</span>
-            <span>{flag(name)}</span>
-            <span className="flex-1 truncate">{name}</span>
-            {s && <span className="text-slate-500 font-mono text-[10px]">{s.pts}分</span>}
-          </div>
-        );
-      })}
+      {sorted.map((t, i) => (
+        <div key={t.name} className={`flex items-center gap-1 px-2 py-1 text-xs ${i < 2 ? 'bg-emerald-50/60' : i === 2 ? 'bg-amber-50/40' : ''}`}>
+          <span className="w-3 text-slate-400 text-[10px]">{t.position}</span>
+          <span>{flag(t.name)}</span>
+          <span className="flex-1 truncate">{t.name}</span>
+          <span className="text-slate-500 font-mono text-[10px]">{t.pts}分</span>
+        </div>
+      ))}
     </div>
   );
 }
