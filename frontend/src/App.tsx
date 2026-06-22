@@ -294,21 +294,22 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* R32 opponent probabilities */}
+                {/* Group qualification summary */}
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-                  <h3 className="text-sm font-semibold text-slate-600 mb-3">🎯 1/16决赛对手概率推演</h3>
-                  <div className="grid grid-cols-4 gap-2 text-[11px]">
-                    {mc.opponentProbs?.map((op: any) => (
-                      <div key={op.matchId} className="bg-slate-50 rounded-lg p-2 border border-slate-100">
-                        <div className="font-mono text-sky-500 text-[10px] font-bold mb-1">{op.matchId} <span className="text-slate-400">({op.slot})</span></div>
-                        <div className="space-y-0.5">
-                          {op.opponents.slice(0, 4).map((o: any) => (
-                            <div key={o.team} className="flex items-center gap-1">
-                              <span className="text-[10px]">{flag(o.team)}</span>
-                              <span className="flex-1 truncate text-slate-600">{o.team}</span>
-                              <span className={`font-mono font-bold text-[10px] ${o.prob > 30 ? 'text-emerald-600' : o.prob > 10 ? 'text-sky-600' : 'text-slate-400'}`}>{o.prob}%</span>
-                            </div>
-                          ))}
+                  <h3 className="text-sm font-semibold text-slate-600 mb-3">📋 小组出线概率 · 前2直接晋级 第3待定</h3>
+                  <div className="grid grid-cols-4 md:grid-cols-6 gap-2 text-[11px]">
+                    {mc?.groupProbs?.map((gp: any) => (
+                      <div key={gp.group} className="bg-slate-50 rounded-lg p-2 border border-slate-100">
+                        <div className="font-bold text-slate-700 mb-1">{gp.group} 组</div>
+                        {gp.teams.slice(0, 2).map((t: any) => (
+                          <div key={t.name} className="flex items-center gap-1 truncate">
+                            <span>{flag(t.name)}</span>
+                            <span className="flex-1 truncate">{t.name}</span>
+                            <span className="font-mono text-emerald-600 font-bold">{t.first}%</span>
+                          </div>
+                        ))}
+                        <div className="text-[10px] text-amber-600 mt-0.5 border-t border-slate-200 pt-0.5 truncate">
+                          {gp.teams[2] && `${flag(gp.teams[2].name)}${gp.teams[2].name} 第3:${gp.teams[2].third}%`}
                         </div>
                       </div>
                     ))}
