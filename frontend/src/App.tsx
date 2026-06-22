@@ -294,25 +294,33 @@ export default function App() {
                   </div>
                 </div>
 
-                {/* Group qualification summary */}
+                {/* Group → Bracket slot mapping */}
                 <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-                  <h3 className="text-sm font-semibold text-slate-600 mb-3">📋 小组出线概率 · 前2直接晋级 第3待定</h3>
-                  <div className="grid grid-cols-4 md:grid-cols-6 gap-2 text-[11px]">
-                    {mc?.groupProbs?.map((gp: any) => (
-                      <div key={gp.group} className="bg-slate-50 rounded-lg p-2 border border-slate-100">
-                        <div className="font-bold text-slate-700 mb-1">{gp.group} 组</div>
-                        {gp.teams.slice(0, 2).map((t: any) => (
-                          <div key={t.name} className="flex items-center gap-1 truncate">
-                            <span>{flag(t.name)}</span>
-                            <span className="flex-1 truncate">{t.name}</span>
-                            <span className="font-mono text-emerald-600 font-bold">{t.first}%</span>
+                  <h3 className="text-sm font-semibold text-slate-600 mb-3">📋 出线概率 → 淘汰赛落位</h3>
+                  <div className="grid grid-cols-4 gap-1.5 text-[10px]">
+                    {mc?.groupProbs?.map((gp: any) => {
+                      const t1=gp.teams[0], t2=gp.teams[1], t3=gp.teams[2];
+                      return (
+                        <div key={gp.group} className="bg-slate-50 rounded border border-slate-100 p-1.5">
+                          <div className="font-bold text-slate-600 mb-0.5">{gp.group}组</div>
+                          <div className={`flex gap-1 py-0.5 px-1 rounded ${t1.first>60?'bg-emerald-100':''}`}>
+                            <span className="text-emerald-600 font-mono font-bold w-5">1{gp.group}</span>
+                            <span className="truncate">{flag(t1?.name)}{t1?.name}</span>
+                            <span className="font-mono text-emerald-600 ml-auto">{t1?.first}%</span>
                           </div>
-                        ))}
-                        <div className="text-[10px] text-amber-600 mt-0.5 border-t border-slate-200 pt-0.5 truncate">
-                          {gp.teams[2] && `${flag(gp.teams[2].name)}${gp.teams[2].name} 第3:${gp.teams[2].third}%`}
+                          <div className={`flex gap-1 py-0.5 px-1 rounded ${t2?.second>50?'bg-sky-100':''}`}>
+                            <span className="text-sky-600 font-mono font-bold w-5">2{gp.group}</span>
+                            <span className="truncate">{flag(t2?.name)}{t2?.name}</span>
+                            <span className="font-mono text-sky-600 ml-auto">{t2?.second}%</span>
+                          </div>
+                          <div className={`flex gap-1 py-0.5 px-1 rounded ${t3?.third>30?'bg-amber-100':''}`}>
+                            <span className="text-amber-600 font-mono font-bold w-5">3{gp.group}</span>
+                            <span className="truncate">{flag(t3?.name)}{t3?.name}</span>
+                            <span className="font-mono text-amber-600 ml-auto">{t3?.third}%</span>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 </div>
               </>
