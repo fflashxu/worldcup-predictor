@@ -22,7 +22,7 @@ export async function injectResults(
   for (const r of results) {
     try {
       await prisma.prediction.upsert({
-        where: { matchId_predictedBy: { matchId: r.matchId, predictedBy: 'result' } },
+        where: { matchId_predictedBy_variant: { matchId: r.matchId, predictedBy: 'result', variant: 1 } },
         update: { homeScore: r.homeScore, awayScore: r.awayScore },
         create: {
           matchId: r.matchId,

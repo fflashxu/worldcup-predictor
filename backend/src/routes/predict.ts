@@ -38,7 +38,7 @@ predictRouter.post('/predict', async (req: Request, res: Response) => {
 
 // POST /api/predict/mc/:matchId — Monte Carlo for one match
 predictRouter.post('/predict/mc/:matchId', async (req: Request, res: Response) => {
-  const { matchId } = req.params;
+  const matchId = req.params.matchId as string;
   const allMatches = generateGroupMatches();
   const match = allMatches.find(m => m.id === matchId);
   if (!match) return res.status(404).json({ error: 'Match not found' });
@@ -49,15 +49,22 @@ predictRouter.post('/predict/mc/:matchId', async (req: Request, res: Response) =
   const doneIds = new Set(results.map(r => r.matchId));
   if (doneIds.has(matchId)) return res.json({ skipped: true, reason: 'already played' });
 
-  // Predict 3 MC variants (different random seeds from Poisson)
+  // Predict 3 MC variants (independent Poisson samples from same λ)
+  // Each sample is a full match simulation, so results naturally vary
+  const hλ = estStr(match.home!, st);
+  const aλ = estStr(match.away!, st);
   const preds = [];
+  const seen = new Set<string>();
+  let attempts = 0;
   for (let v = 1; v <= 3; v++) {
-    const hλ = estStr(match.home!, st);
-    const aλ = estStr(match.away!, st);
-    // Add noise for variants
-    const noise = () => Math.round(Math.random() * 2 - 1); // -1, 0, or 1
-    const h = Math.max(0, Math.round(hλ) + noise());
-    const a = Math.max(0, Math.round(aλ) + noise());
+    let h: number, a: number;
+    do {
+      // Independent Poisson samples for each match simulation
+      h = poissonSample(hλ);
+      a = poissonSample(aλ);
+      attempts++;
+    } while (seen.has(`${h}-${a}`) && attempts < 20);
+    seen.add(`${h}-${a}`);
     const p = await prisma.prediction.upsert({
       where: { matchId_predictedBy_variant: { matchId, predictedBy: 'mc', variant: v } },
       update: { homeScore: h, awayScore: a },
@@ -70,7 +77,7 @@ predictRouter.post('/predict/mc/:matchId', async (req: Request, res: Response) =
 
 // POST /api/predict/ds/:matchId — DeepSeek for one match
 predictRouter.post('/predict/ds/:matchId', async (req: Request, res: Response) => {
-  const { matchId } = req.params;
+  const matchId = req.params.matchId as string;
   const allMatches = generateGroupMatches();
   const match = allMatches.find(m => m.id === matchId);
   if (!match) return res.status(404).json({ error: 'Match not found' });
@@ -85,17 +92,28 @@ predictRouter.post('/predict/ds/:matchId', async (req: Request, res: Response) =
     return r ? { ...m, homeScore: r.homeScore, awayScore: r.awayScore } : m;
   });
 
+  // DS: up to 3 retries to get different predictions
+  const dsResults = new Set<string>();
   const preds = [];
   for (let v = 1; v <= 3; v++) {
-    try {
-      const pred = await predictMatch(match, existingResults);
+    let tries = 0;
+    let pred;
+    while (tries < 5) {
+      try {
+        pred = await predictMatch(match, existingResults);
+        const key = `${pred.homeScore}-${pred.awayScore}`;
+        if (!dsResults.has(key)) { dsResults.add(key); break; }
+      } catch (e) { console.error(`DS v${v} try${tries} failed:`, e); }
+      tries++;
+    }
+    if (pred) {
       const p = await prisma.prediction.upsert({
         where: { matchId_predictedBy_variant: { matchId, predictedBy: 'ds', variant: v } },
         update: { homeScore: pred.homeScore, awayScore: pred.awayScore },
         create: { matchId, homeScore: pred.homeScore, awayScore: pred.awayScore, predictedBy: 'ds', variant: v, tournamentRound: 'GROUP' },
       });
       preds.push({ variant: v, homeScore: p.homeScore, awayScore: p.awayScore });
-    } catch (e) { console.error(`DS v${v} failed:`, e); }
+    }
   }
   res.json({ matchId, predictions: preds });
 });
@@ -123,6 +141,13 @@ function estStr(team: string, st: Record<string, any[]>): number {
     if (t && t.played > 0) return (t.gf + 3.9) / (t.played + 3);
   }
   return 1.3;
+}
+
+function poissonSample(lambda: number): number {
+  const L = Math.exp(-lambda);
+  let k = 0, p = 1;
+  while (p > L) { k++; p *= Math.random(); }
+  return k - 1;
 }
 
 // GET /api/schedule — full match schedule with real dates from openligadb
@@ -203,7 +228,7 @@ predictRouter.post('/results', async (req: Request, res: Response) => {
 
   // Save as verified result (predictedBy='result')
   const result = await prisma.prediction.upsert({
-    where: { matchId_predictedBy: { matchId, predictedBy: 'result' } },
+    where: { matchId_predictedBy_variant: { matchId, predictedBy: 'result', variant: 1 } },
     update: { homeScore, awayScore },
     create: { matchId, homeScore, awayScore, predictedBy: 'result', tournamentRound: 'GROUP' },
   });
