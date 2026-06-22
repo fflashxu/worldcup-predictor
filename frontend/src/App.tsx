@@ -481,13 +481,16 @@ function BracketSlotView({ id, r32, opps }: { id: string; r32: Record<string, an
         </div>
       );
     }
-    // Uncertain slot (3?): show possible opponents with probs
+    // Uncertain slot (3?): show possible opponents with probs, excluding fixed-slot teams
     const sorted = opps ? [...opps].sort((a: any, b: any) => b.prob - a.prob) : [];
+    // Get the fixed-slot team to exclude from 3? (e.g., for M74 1E vs 3?, exclude Germany)
+    const fixedTeam = isFixed(homeCode) ? homeTeam : isFixed(awayCode) ? awayTeam : null;
+    const thirdCandidates = sorted.filter((o: any) => o.team !== fixedTeam);
     return (
       <div>
         <span className="text-[10px] font-mono text-amber-600">{code}</span>
-        {sorted.length > 0 ? (
-          sorted.slice(0, 2).map((o: any) => (
+        {thirdCandidates.length > 0 ? (
+          thirdCandidates.slice(0, 2).map((o: any) => (
             <div key={o.team} className="flex items-center gap-1 pl-3 text-[10px]">
               <span>{flag(o.team)}</span>
               <span className="truncate text-slate-600">{o.team}</span>
