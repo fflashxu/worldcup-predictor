@@ -61,6 +61,7 @@ function MatchCard({ m, preds, onUserPredict, onMC, onDS }: {
   const [dsLoading, setDsLoading] = useState(false);
   const mcPreds = preds.filter(p => p.predictedBy === 'mc');
   const dsPreds = preds.filter(p => p.predictedBy === 'ds');
+  const userPreds = preds.filter(p => p.predictedBy === 'user');
   const ok = (h: number, a: number) => m.completed && h === m.homeScore && a === m.awayScore;
   return (
     <div className={`rounded-lg border p-2 text-xs ${m.completed ? 'bg-emerald-50/30 border-emerald-200' : 'bg-white border-slate-200'}`}>
@@ -92,6 +93,10 @@ function MatchCard({ m, preds, onUserPredict, onMC, onDS }: {
           mcPreds.length > 0 ? mcPreds.map(p => (
             <span key={p.variant} className={`font-mono ${ok(p.homeScore, p.awayScore) ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>{p.homeScore}-{p.awayScore}</span>))
           : !m.completed && <span className="text-slate-300">点📊预测</span>}
+        {/* User predictions */}
+        {userPreds.map(p => (
+          <span key={`u${p.variant}`} className={`font-mono ${ok(p.homeScore, p.awayScore) ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>👤{p.homeScore}-{p.awayScore}</span>
+        ))}
         <span className="flex-1"></span>
         <button onClick={async () => { setDsLoading(true); await onDS(); setDsLoading(false); }} disabled={m.completed || dsLoading}
           className={`shrink-0 px-1 rounded ${m.completed ? 'text-slate-300' : dsLoading ? 'text-purple-400 animate-pulse' : 'text-purple-600 hover:bg-purple-50'}`} title="DeepSeek+体彩赔率">
