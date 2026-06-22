@@ -91,5 +91,5 @@ export function startAutoSync() {
     } catch (e) {
       console.error('[sync] ❌ Error:', e);
     }
-  }, 5 * 60 * 1000);
+  }, 60 * 60 * 1000); // Every 1 hour
 }

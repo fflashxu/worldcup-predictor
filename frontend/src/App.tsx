@@ -161,7 +161,12 @@ export default function App() {
               ))}
             </nav>
           </div>
-          <span className="text-xs text-slate-400">📊 MC数学 | 🧠 DeepSeek | 👤 你的预测 — 每场可独立触发</span>
+          <button onClick={async () => {
+            await api.post('/sync');
+            qc.invalidateQueries();
+          }} className="text-xs text-slate-400 hover:text-sky-600 border border-slate-200 rounded px-2 py-1">
+            🔄 刷新数据
+          </button>
         </div>
       </header>
 
