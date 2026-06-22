@@ -462,35 +462,47 @@ export default function App() {
 
 function BracketSlotView({ id, r32, opps }: { id: string; r32: Record<string, any>; opps?: any[] }) {
   const s = r32[id];
-  const getOppProb = (team: string | null) => {
-    if (!team || !opps) return null;
-    const found = opps.find((o: any) => o.team === team);
-    return found?.prob || null;
+  const homeCode = s?.slot?.home || '', awayCode = s?.slot?.away || '';
+  const homeTeam = s?.homeTeam, awayTeam = s?.awayTeam;
+  const isFixed = (code: string) => /^[12][A-L]$/.test(code); // 1A-1L or 2A-2L = fixed
+  const isThird = (code: string) => code.startsWith('3'); // 3? = uncertain
+
+  const SlotLine = ({ code, team }: { code: string; team: string | null }) => {
+    // Fixed slot (1X/2X): show projected team
+    if (isFixed(code)) {
+      return (
+        <div className="flex items-center gap-1">
+          <span className="text-[10px] font-mono text-emerald-600 w-7 shrink-0">{code}</span>
+          <span className="text-[10px]">{flag(team||'')}</span>
+          <span className="flex-1 truncate text-[11px] text-slate-700">{team || '待定'}</span>
+        </div>
+      );
+    }
+    // Uncertain slot (3?): show possible opponents with probs
+    const sorted = opps ? [...opps].sort((a: any, b: any) => b.prob - a.prob) : [];
+    return (
+      <div>
+        <span className="text-[10px] font-mono text-amber-600">{code}</span>
+        {sorted.length > 0 ? (
+          sorted.slice(0, 2).map((o: any) => (
+            <div key={o.team} className="flex items-center gap-1 pl-3 text-[10px]">
+              <span>{flag(o.team)}</span>
+              <span className="truncate text-slate-600">{o.team}</span>
+              <span className="font-mono text-slate-400 ml-auto">{o.prob}%</span>
+            </div>
+          ))
+        ) : (
+          <div className="text-[10px] text-slate-400 pl-3">待定</div>
+        )}
+      </div>
+    );
   };
-  const homeProb = getOppProb(s?.homeTeam);
-  const awayProb = getOppProb(s?.awayTeam);
-  const homeCode = s?.slot?.home || '';
-  const awayCode = s?.slot?.away || '';
 
   return (
     <div className="bg-white border border-slate-200 rounded px-1.5 py-1">
-      <div className="flex items-center gap-1">
-        <span className="text-[10px] font-mono text-slate-400 w-7 shrink-0">{homeCode}</span>
-        <span className="text-[10px]">{flag(s?.homeTeam||'')}</span>
-        <span className="flex-1 truncate text-[11px] text-slate-700">{s?.homeTeam || '待定'}</span>
-        {homeProb !== null && (
-          <span className={`font-mono text-[10px] shrink-0 ${homeProb > 40 ? 'text-emerald-600 font-bold' : homeProb > 15 ? 'text-sky-600' : 'text-slate-400'}`}>{homeProb}%</span>
-        )}
-      </div>
+      <SlotLine code={homeCode} team={homeTeam} />
       <div className="border-t border-slate-100 my-0.5"></div>
-      <div className="flex items-center gap-1">
-        <span className="text-[10px] font-mono text-slate-400 w-7 shrink-0">{awayCode}</span>
-        <span className="text-[10px]">{flag(s?.awayTeam||'')}</span>
-        <span className="flex-1 truncate text-[11px] text-slate-700">{s?.awayTeam || '待定'}</span>
-        {awayProb !== null && (
-          <span className={`font-mono text-[10px] shrink-0 ${awayProb > 40 ? 'text-emerald-600 font-bold' : awayProb > 15 ? 'text-sky-600' : 'text-slate-400'}`}>{awayProb}%</span>
-        )}
-      </div>
+      <SlotLine code={awayCode} team={awayTeam} />
     </div>
   );
 }
