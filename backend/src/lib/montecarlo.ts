@@ -126,11 +126,12 @@ export async function runMonteCarlo(): Promise<SimResult> {
     }
     const avail = [...q3g];
     for (const [mid, w] of w3Pairs) {
+      // Find first available 3rd-place not from same group as winner
       const idx = avail.findIndex(g => g !== w);
       if (idx < 0) continue;
       const tg = avail.splice(idx, 1)[0];
       const t3 = q3.find(x => x.group === tg)!.team;
-      r32Opp[mid][gw.get(w)!] = (r32Opp[mid][gw.get(w)!] || 0) + 1;
+      // Only track the 3rd-place opponent, NOT the winner (winner is fixed/known)
       r32Opp[mid][t3] = (r32Opp[mid][t3] || 0) + 1;
     }
 
