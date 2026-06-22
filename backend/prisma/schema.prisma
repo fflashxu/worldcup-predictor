@@ -1,0 +1,20 @@
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+model Prediction {
+  id              String   @id @default(uuid())
+  matchId         String
+  homeScore       Int
+  awayScore       Int
+  predictedBy     String
+  tournamentRound String
+  createdAt       DateTime @default(now())
+
+  @@unique([matchId, predictedBy])
+}

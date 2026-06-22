@@ -1,0 +1,94 @@
+// ⚠️ DATA INTEGRITY RULE: sole data source = openligadb.de (anchored to 央视/FIFA)
+// Never manually inject results. Never use WebSearch fallback.
+// All match data flows through syncFromOpenLiga() only.
+import { generateGroupMatches, TEAMS, GROUPS, Group } from './tournament';
+import { injectResults } from './datasource';
+
+const OPENLIGADB_URL = 'https://api.openligadb.de/getmatchdata/wm2026/2026';
+
+// German→Chinese team name mapping (from openligadb data)
+const NAME_MAP: Record<string, string> = {
+  'Mexiko': '墨西哥', 'Südafrika': '南非', 'Südkorea': '韩国', 'Tschechien': '捷克',
+  'Kanada': '加拿大', 'Bosnien-Herzegowina': '波黑', 'Katar': '卡塔尔', 'Schweiz': '瑞士',
+  'Brasilien': '巴西', 'Marokko': '摩洛哥', 'Haiti': '海地', 'Schottland': '苏格兰',
+  'USA': '美国', 'Paraguay': '巴拉圭', 'Australien': '澳大利亚', 'Türkei': '土耳其',
+  'Deutschland': '德国', 'Curaçao': '库拉索', 'Elfenbeinküste': '科特迪瓦', 'Ecuador': '厄瓜多尔',
+  'Niederlande': '荷兰', 'Japan': '日本', 'Schweden': '瑞典', 'Tunesien': '突尼斯',
+  'Belgien': '比利时', 'Ägypten': '埃及', 'Iran': '伊朗', 'Neuseeland': '新西兰',
+  'Spanien': '西班牙', 'Kap Verde': '佛得角', 'Saudi-Arabien': '沙特', 'Uruguay': '乌拉圭',
+  'Frankreich': '法国', 'Senegal': '塞内加尔', 'Irak': '伊拉克', 'Norwegen': '挪威',
+  'Argentinien': '阿根廷', 'Algerien': '阿尔及利亚', 'Österreich': '奥地利', 'Jordanien': '约旦',
+  'Portugal': '葡萄牙', 'DR Kongo': '刚果(金)', 'Usbekistan': '乌兹别克斯坦', 'Kolumbien': '哥伦比亚',
+  'England': '英格兰', 'Kroatien': '克罗地亚', 'Ghana': '加纳', 'Panama': '巴拿马',
+};
+
+function toCN(germanName: string): string {
+  return NAME_MAP[germanName] || germanName;
+}
+
+interface OpenLigaMatch {
+  matchID: number;
+  matchDateTime: string;
+  matchIsFinished: boolean;
+  team1: { teamName: string };
+  team2: { teamName: string };
+  matchResults: { resultName: string; pointsTeam1: number; pointsTeam2: number }[];
+  group: { groupName: string };
+}
+
+export async function syncFromOpenLiga(): Promise<{ total: number; newResults: number }> {
+  const res = await fetch(OPENLIGADB_URL);
+  const matches: OpenLigaMatch[] = await res.json() as OpenLigaMatch[];
+
+  const finished = matches.filter(m => m.matchIsFinished);
+  const allGroupMatches = generateGroupMatches();
+
+  const toInject: { matchId: string; homeScore: number; awayScore: number }[] = [];
+
+  for (const olm of finished) {
+    const result = olm.matchResults.find(r => r.resultName === 'Endergebnis');
+    if (!result) continue;
+
+    const homeCN = toCN(olm.team1.teamName);
+    const awayCN = toCN(olm.team2.teamName);
+
+    // Find matching match in our schedule
+    let match = allGroupMatches.find(m => m.home === homeCN && m.away === awayCN);
+    let reversed = false;
+    if (!match) {
+      match = allGroupMatches.find(m => m.home === awayCN && m.away === homeCN);
+      reversed = true;
+    }
+
+    if (match) {
+      toInject.push({
+        matchId: match.id,
+        homeScore: reversed ? result.pointsTeam2 : result.pointsTeam1,
+        awayScore: reversed ? result.pointsTeam1 : result.pointsTeam2,
+      });
+    }
+  }
+
+  const count = await injectResults(toInject);
+  return { total: finished.length, newResults: count };
+}
+
+// Schedule auto-sync every 5 minutes + data integrity check
+export function startAutoSync() {
+  console.log('[sync] Auto-sync started (every 5min, source: openligadb /2026)');
+  syncFromOpenLiga().then(r => {
+    console.log(`[sync] Initial: ${r.total} finished, ${r.newResults} new`);
+    if (r.total > 0 && r.newResults === 0) console.log('[sync] ✓ Data already up to date');
+  });
+
+  setInterval(async () => {
+    try {
+      const r = await syncFromOpenLiga();
+      if (r.newResults > 0) {
+        console.log(`[sync] 🆕 ${r.newResults} new results injected (total: ${r.total})`);
+      }
+    } catch (e) {
+      console.error('[sync] ❌ Error:', e);
+    }
+  }, 5 * 60 * 1000);
+}
