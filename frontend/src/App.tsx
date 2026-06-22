@@ -52,21 +52,18 @@ function R32Row({ id, slot1, slot2, t1, t2 }: {
 
 function MatchCard({ m, preds, onUserPredict, onMC, onDS }: {
   m: any; preds: Prediction[];
-  onUserPredict: (v: number, h: number, a: number) => void;
+  onUserPredict: (h: number, a: number) => void;  // auto-advances variant
   onMC: () => Promise<any>; onDS: () => Promise<any>;
 }) {
-  const [userScores, setUserScores] = useState(() => {
-    const ups = preds.filter(p => p.predictedBy === 'user').sort((a,b) => (a.variant||1)-(b.variant||1));
-    return [1,2,3].map(v => {
-      const p = ups.find(u => u.variant === v);
-      return { v, h: p?.homeScore ?? 0, a: p?.awayScore ?? 0 };
-    });
-  });
+  const [uh, setUh] = useState(0);
+  const [ua, setUa] = useState(0);
   const [mcLoading, setMcLoading] = useState(false);
   const [dsLoading, setDsLoading] = useState(false);
   const mcPreds = preds.filter(p => p.predictedBy === 'mc');
   const dsPreds = preds.filter(p => p.predictedBy === 'ds');
-  const userPreds = preds.filter(p => p.predictedBy === 'user');
+  const userPreds = preds.filter(p => p.predictedBy === 'user').sort((a,b) => (a.variant||1)-(b.variant||1));
+  const usedCount = userPreds.length;
+  const remaining = 3 - usedCount;
   const ok = (h: number, a: number) => m.completed && h === m.homeScore && a === m.awayScore;
   return (
     <div className={`rounded-lg border p-2 text-xs ${m.completed ? 'bg-emerald-50/30 border-emerald-200' : 'bg-white border-slate-200'}`}>
@@ -75,44 +72,32 @@ function MatchCard({ m, preds, onUserPredict, onMC, onDS }: {
         {m.completed ? (
           <span className="font-mono font-bold text-emerald-700 shrink-0 px-2">{m.homeScore}-{m.awayScore}</span>
         ) : (
-          <div className="flex gap-0.5">
-            {userScores.map((us, i) => (
-              <div key={i} className="flex items-center gap-0">
-                <span className="text-[8px] text-slate-400 mr-0.5">{i+1}</span>
-                <input type="number" min={0} max={15} value={us.h} onChange={e => {
-                  const ns = [...userScores]; ns[i] = {...ns[i], h: Number(e.target.value)}; setUserScores(ns);
-                }} className="w-6 text-center border border-slate-300 rounded text-[10px] py-0.5" />
-                <span className="text-slate-400 text-[10px]">-</span>
-                <input type="number" min={0} max={15} value={us.a} onChange={e => {
-                  const ns = [...userScores]; ns[i] = {...ns[i], a: Number(e.target.value)}; setUserScores(ns);
-                }} className="w-6 text-center border border-slate-300 rounded text-[10px] py-0.5" />
-              </div>
-            ))}
-          </div>
+          <>
+            <input type="number" min={0} max={15} value={uh} onChange={e => setUh(Number(e.target.value))}
+              className="w-7 text-center border border-slate-300 rounded text-[11px] py-0.5" />
+            <span className="text-slate-400">-</span>
+            <input type="number" min={0} max={15} value={ua} onChange={e => setUa(Number(e.target.value))}
+              className="w-7 text-center border border-slate-300 rounded text-[11px] py-0.5" />
+          </>
         )}
         <span className="w-20 truncate text-[11px]">{flag(m.away)} {m.away}</span>
-        {!m.completed && (
-          <button onClick={() => userScores.forEach(us => onUserPredict(us.v, us.h, us.a))}
-            className="text-[10px] bg-sky-500 hover:bg-sky-600 text-white px-1.5 py-0.5 rounded shrink-0">👤</button>
+        {!m.completed && remaining > 0 && (
+          <button onClick={() => { onUserPredict(uh, ua); setUh(0); setUa(0); }}
+            className="text-[10px] bg-sky-500 hover:bg-sky-600 text-white px-1.5 py-0.5 rounded shrink-0">
+            👤×{remaining}</button>
         )}
+        {!m.completed && remaining === 0 && <span className="text-[10px] text-slate-400">👤已用完</span>}
       </div>
-      {/* Predictions display row */}
+      {/* Predictions row */}
       <div className="flex items-center gap-1 mt-1.5 text-[10px]">
         <button onClick={async () => { setMcLoading(true); await onMC(); setMcLoading(false); }} disabled={m.completed || mcLoading}
-          className={`shrink-0 px-1 rounded ${m.completed ? 'text-slate-300' : mcLoading ? 'text-sky-400 animate-pulse' : 'text-sky-600 hover:bg-sky-50'}`}>
-          {mcLoading ? '⏳' : '📊'}</button>
+          className={`shrink-0 px-1 rounded ${mcLoading ? 'text-sky-400 animate-pulse' : 'text-sky-600 hover:bg-sky-50'}`}>📊</button>
         {mcPreds.map(p => <span key={p.variant} className={`font-mono ${ok(p.homeScore,p.awayScore)?'text-emerald-600 font-bold':'text-slate-400'}`}>{p.homeScore}-{p.awayScore}</span>)}
-        {!m.completed && mcPreds.length===0 && <span className="text-slate-300">点📊</span>}
-        {userPreds.sort((a,b)=>(a.variant||1)-(b.variant||1)).map(p => (
-          <span key={`u${p.variant}`} className={`font-mono ${ok(p.homeScore,p.awayScore)?'text-emerald-600 font-bold':'text-amber-600'}`}>👤{p.homeScore}-{p.awayScore}</span>
-        ))}
+        {userPreds.map(p => <span key={`u${p.variant}`} className={`font-mono ${ok(p.homeScore,p.awayScore)?'text-emerald-600 font-bold':'text-slate-400'}`}>👤{p.homeScore}-{p.awayScore}</span>)}
         <span className="flex-1"></span>
         <button onClick={async () => { setDsLoading(true); await onDS(); setDsLoading(false); }} disabled={m.completed || dsLoading}
-          className={`shrink-0 px-1 rounded ${m.completed?'text-slate-300':dsLoading?'text-purple-400 animate-pulse':'text-purple-600 hover:bg-purple-50'}`}>
-          {dsLoading?'⏳':'🧠'}</button>
-        {dsLoading ? <span className="text-purple-400 animate-pulse text-[9px]">体彩推理中...</span> :
-          dsPreds.map(p => <span key={p.variant} className={`font-mono ${ok(p.homeScore,p.awayScore)?'text-emerald-600 font-bold':'text-slate-400'}`}>{p.homeScore}-{p.awayScore}</span>)}
-        {!m.completed && dsPreds.length===0 && <span className="text-slate-300">点🧠</span>}
+          className={`shrink-0 px-1 rounded ${dsLoading?'text-purple-400 animate-pulse':'text-purple-600 hover:bg-purple-50'}`}>🧠</button>
+        {dsPreds.map(p => <span key={p.variant} className={`font-mono ${ok(p.homeScore,p.awayScore)?'text-emerald-600 font-bold':'text-slate-400'}`}>{p.homeScore}-{p.awayScore}</span>)}
       </div>
     </div>
   );
@@ -197,7 +182,11 @@ export default function App() {
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
                     {matches.map((m: any) => (
                       <MatchCard key={m.id} m={m} preds={preds?.filter((p: Prediction) => p.matchId === m.id) || []}
-                        onUserPredict={(v, h, a) => submit.mutate({ matchId: m.id, homeScore: h, awayScore: a, predictedBy: 'user', variant: v })}
+                        onUserPredict={(h, a) => {
+                          const ups = (preds || []).filter((p: Prediction) => p.matchId === m.id && p.predictedBy === 'user');
+                          const nextVariant = Math.min(3, ups.length + 1);
+                          submit.mutate({ matchId: m.id, homeScore: h, awayScore: a, predictedBy: 'user', variant: nextVariant });
+                        }}
                         onMC={() => api.post(`/predict/mc/${m.id}`).then(() => qc.invalidateQueries({ queryKey: ['predictions'] }))}
                         onDS={() => api.post(`/predict/ds/${m.id}`).then(() => qc.invalidateQueries({ queryKey: ['predictions'] }))}
                       />
