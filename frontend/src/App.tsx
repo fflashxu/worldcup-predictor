@@ -50,6 +50,61 @@ function R32Row({ id, slot1, slot2, t1, t2 }: {
   );
 }
 
+function MatchCard({ m, preds, onUserPredict, onMC, onDS }: {
+  m: any; preds: Prediction[];
+  onUserPredict: (h: number, a: number) => void;
+  onMC: () => void; onDS: () => void;
+}) {
+  const [uh, setUh] = useState(preds.filter(p=>p.predictedBy==='user')[0]?.homeScore ?? 0);
+  const [ua, setUa] = useState(preds.filter(p=>p.predictedBy==='user')[0]?.awayScore ?? 0);
+  const mcPreds = preds.filter(p => p.predictedBy === 'mc');
+  const dsPreds = preds.filter(p => p.predictedBy === 'ds');
+  const userPreds = preds.filter(p => p.predictedBy === 'user');
+  const ok = (h: number, a: number) => m.completed && h === m.homeScore && a === m.awayScore;
+  return (
+    <div className={`rounded-lg border p-2 text-xs ${m.completed ? 'bg-emerald-50/30 border-emerald-200' : 'bg-white border-slate-200'}`}>
+      <div className="flex items-center gap-1">
+        <span className="w-20 truncate text-right text-[11px]">{flag(m.home)} {m.home}</span>
+        {m.completed ? (
+          <span className="font-mono font-bold text-emerald-700 shrink-0 px-2">{m.homeScore}-{m.awayScore}</span>
+        ) : (
+          <>
+            <input type="number" min={0} max={15} value={uh} onChange={e => setUh(Number(e.target.value))}
+              className="w-7 text-center border border-slate-300 rounded text-[11px] py-0.5" />
+            <span className="text-slate-400">-</span>
+            <input type="number" min={0} max={15} value={ua} onChange={e => setUa(Number(e.target.value))}
+              className="w-7 text-center border border-slate-300 rounded text-[11px] py-0.5" />
+          </>
+        )}
+        <span className="w-20 truncate text-[11px]">{flag(m.away)} {m.away}</span>
+        {!m.completed && (
+          <button onClick={() => onUserPredict(uh, ua)} className="text-[10px] bg-sky-500 hover:bg-sky-600 text-white px-1.5 py-0.5 rounded shrink-0">👤</button>
+        )}
+      </div>
+      {/* Model triggers + predictions */}
+      <div className="flex items-center gap-1 mt-1.5 text-[10px]">
+        {/* MC row */}
+        <button onClick={onMC} disabled={m.completed}
+          className={`shrink-0 px-1 rounded ${m.completed ? 'text-slate-300' : 'text-sky-600 hover:bg-sky-50'}`} title="MC数学预测">📊</button>
+        {mcPreds.map(p => (
+          <span key={p.variant} className={`font-mono ${ok(p.homeScore, p.awayScore) ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+            {p.homeScore}-{p.awayScore}</span>
+        ))}
+        {!m.completed && mcPreds.length === 0 && <span className="text-slate-300">点📊预测</span>}
+        <span className="flex-1"></span>
+        {/* DS row */}
+        <button onClick={onDS} disabled={m.completed}
+          className={`shrink-0 px-1 rounded ${m.completed ? 'text-slate-300' : 'text-purple-600 hover:bg-purple-50'}`} title="DeepSeek推理">🧠</button>
+        {dsPreds.map(p => (
+          <span key={p.variant} className={`font-mono ${ok(p.homeScore, p.awayScore) ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
+            {p.homeScore}-{p.awayScore}</span>
+        ))}
+        {!m.completed && dsPreds.length === 0 && <span className="text-slate-300">点🧠预测</span>}
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>('groups');
@@ -65,7 +120,7 @@ export default function App() {
   const { data: preds } = useQuery({ queryKey: ['predictions'], queryFn: () => api.get('/predictions').then(r => r.data as Prediction[]) });
 
   const submit = useMutation({
-    mutationFn: (d: { matchId: string; homeScore: number; awayScore: number }) => api.post('/predict', d),
+    mutationFn: (d: { matchId: string; homeScore: number; awayScore: number; predictedBy?: string }) => api.post('/predict', d),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['predictions'] }),
   });
   const triggerAI = useMutation({
@@ -107,10 +162,7 @@ export default function App() {
               ))}
             </nav>
           </div>
-          <button onClick={() => { setAiLoading(true); triggerAI.mutate(); }} disabled={aiLoading}
-            className="bg-sky-500 hover:bg-sky-600 disabled:opacity-50 text-white px-4 py-1.5 rounded-lg text-sm font-medium">
-            {aiLoading ? '🤖 预测中...' : '🤖 AI 预测'}
-          </button>
+          <span className="text-xs text-slate-400">📊 MC数学 | 🧠 DeepSeek | 👤 你的预测 — 每场可独立触发</span>
         </div>
       </header>
 
@@ -130,39 +182,13 @@ export default function App() {
                 <div key={date}>
                   <div className="text-xs font-semibold text-slate-500 mb-2 sticky top-12 bg-slate-50 py-1">{date}</div>
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
-                    {matches.map((m: any) => {
-                      const userP = getPred(m.id, 'user');
-                      const mcP = getPred(m.id, 'mc');
-                      const dsP = getPred(m.id, 'ds');
-                      const correct = (pred: Prediction | undefined) => m.completed && pred && pred.homeScore === m.homeScore && pred.awayScore === m.awayScore;
-                      const dirOk = (pred: Prediction | undefined) => m.completed && pred && Math.sign(pred.homeScore - pred.awayScore) === Math.sign((m.homeScore||0) - (m.awayScore||0));
-                      return (
-                      <div key={m.id} className={`rounded-lg border p-2 text-xs ${
-                        m.completed ? 'bg-emerald-50/30 border-emerald-200' : 'bg-white border-slate-200'
-                      }`}>
-                        <div className="text-[10px] text-slate-400 mb-1">{m.group} 组</div>
-                        <div className="flex items-center justify-between gap-1">
-                          <span className="truncate">{flag(m.home)} {m.home}</span>
-                          <span className={`font-mono font-bold shrink-0 ${m.completed ? 'text-emerald-700' : 'text-slate-300'}`}>
-                            {m.completed ? `${m.homeScore}-${m.awayScore}` : 'vs'}
-                          </span>
-                          <span className="truncate text-right">{flag(m.away)} {m.away}</span>
-                        </div>
-                        {(userP || mcP || dsP) && (
-                          <div className="flex gap-2 mt-1.5 text-[10px] border-t border-slate-100 pt-1.5 flex-wrap">
-                            {userP && (
-                              <span className={`${correct(userP) ? 'text-emerald-600 font-bold' : dirOk(userP) ? 'text-sky-600' : m.completed ? 'text-rose-400' : 'text-slate-400'}`}>
-                                👤{userP.homeScore}-{userP.awayScore}</span>)}
-                            {mcP && (
-                              <span className={`${correct(mcP) ? 'text-emerald-600 font-bold' : dirOk(mcP) ? 'text-sky-600' : m.completed ? 'text-rose-400' : 'text-slate-400'}`}>
-                                📊{mcP.homeScore}-{mcP.awayScore}</span>)}
-                            {dsP && (
-                              <span className={`${correct(dsP) ? 'text-emerald-600 font-bold' : dirOk(dsP) ? 'text-sky-600' : m.completed ? 'text-rose-400' : 'text-slate-400'}`}>
-                                🧠{dsP.homeScore}-{dsP.awayScore}</span>)}
-                          </div>
-                        )}
-                      </div>
-                    )})}
+                    {matches.map((m: any) => (
+                      <MatchCard key={m.id} m={m} preds={preds?.filter((p: Prediction) => p.matchId === m.id) || []}
+                        onUserPredict={(h, a) => submit.mutate({ matchId: m.id, homeScore: h, awayScore: a, predictedBy: 'user', variant: 1 })}
+                        onMC={() => api.post(`/predict/mc/${m.id}`).then(() => qc.invalidateQueries({ queryKey: ['predictions'] }))}
+                        onDS={() => api.post(`/predict/ds/${m.id}`).then(() => qc.invalidateQueries({ queryKey: ['predictions'] }))}
+                      />
+                    ))}
                   </div>
                 </div>
               ))}

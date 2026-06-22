@@ -22,87 +22,97 @@ predictRouter.get('/predictions', async (_req: Request, res: Response) => {
   res.json(preds);
 });
 
-// POST /api/predict — submit prediction (user or trigger AI)
+// POST /api/predict — submit one prediction variant
 predictRouter.post('/predict', async (req: Request, res: Response) => {
-  const { matchId, homeScore, awayScore, predictedBy } = req.body;
+  const { matchId, homeScore, awayScore, predictedBy, variant } = req.body;
   if (!matchId || homeScore === undefined || awayScore === undefined) {
     return res.status(400).json({ error: 'matchId, homeScore, awayScore required' });
   }
-
   const pred = await prisma.prediction.upsert({
-    where: { matchId_predictedBy: { matchId, predictedBy: predictedBy || 'user' } },
+    where: { matchId_predictedBy_variant: { matchId, predictedBy: predictedBy || 'user', variant: variant || 1 } },
     update: { homeScore, awayScore },
-    create: { matchId, homeScore, awayScore, predictedBy: predictedBy || 'user', tournamentRound: 'GROUP' },
+    create: { matchId, homeScore, awayScore, predictedBy: predictedBy || 'user', variant: variant || 1, tournamentRound: 'GROUP' },
   });
-
   res.json(pred);
 });
 
-// POST /api/predict/ai — dual-model: MC Bayesian + DeepSeek (key matches)
-predictRouter.post('/predict/ai', async (_req: Request, res: Response) => {
-  const results = await prisma.prediction.findMany({ where: { predictedBy: 'result' } });
-  const doneIds = new Set(results.map(r => r.matchId));
+// POST /api/predict/mc/:matchId — Monte Carlo for one match
+predictRouter.post('/predict/mc/:matchId', async (req: Request, res: Response) => {
+  const { matchId } = req.params;
   const allMatches = generateGroupMatches();
-  const remaining = allMatches.filter(m => !doneIds.has(m.id));
+  const match = allMatches.find(m => m.id === matchId);
+  if (!match) return res.status(404).json({ error: 'Match not found' });
 
   const { computeStandings } = await import('../lib/standings');
-  const currentStandings = await computeStandings();
+  const st = await computeStandings();
+  const results = await prisma.prediction.findMany({ where: { predictedBy: 'result' } });
+  const doneIds = new Set(results.map(r => r.matchId));
+  if (doneIds.has(matchId)) return res.json({ skipped: true, reason: 'already played' });
 
-  // Phase 1: MC Bayesian for ALL remaining matches
-  let mcCount = 0;
-  for (const m of remaining) {
-    const hλ = estStr(m.home!, currentStandings);
-    const aλ = estStr(m.away!, currentStandings);
-    await prisma.prediction.upsert({
-      where: { matchId_predictedBy: { matchId: m.id, predictedBy: 'mc' } },
-      update: { homeScore: Math.round(hλ), awayScore: Math.round(aλ) },
-      create: { matchId: m.id, homeScore: Math.round(hλ), awayScore: Math.round(aλ), predictedBy: 'mc', tournamentRound: 'GROUP' },
+  // Predict 3 MC variants (different random seeds from Poisson)
+  const preds = [];
+  for (let v = 1; v <= 3; v++) {
+    const hλ = estStr(match.home!, st);
+    const aλ = estStr(match.away!, st);
+    // Add noise for variants
+    const noise = () => Math.round(Math.random() * 2 - 1); // -1, 0, or 1
+    const h = Math.max(0, Math.round(hλ) + noise());
+    const a = Math.max(0, Math.round(aλ) + noise());
+    const p = await prisma.prediction.upsert({
+      where: { matchId_predictedBy_variant: { matchId, predictedBy: 'mc', variant: v } },
+      update: { homeScore: h, awayScore: a },
+      create: { matchId, homeScore: h, awayScore: a, predictedBy: 'mc', variant: v, tournamentRound: 'GROUP' },
     });
-    mcCount++;
+    preds.push({ variant: v, homeScore: p.homeScore, awayScore: p.awayScore });
   }
+  res.json({ matchId, predictions: preds });
+});
 
-  // Phase 2: DeepSeek for key matches (next 5, or high-importance)
+// POST /api/predict/ds/:matchId — DeepSeek for one match
+predictRouter.post('/predict/ds/:matchId', async (req: Request, res: Response) => {
+  const { matchId } = req.params;
+  const allMatches = generateGroupMatches();
+  const match = allMatches.find(m => m.id === matchId);
+  if (!match) return res.status(404).json({ error: 'Match not found' });
+
+  const results = await prisma.prediction.findMany({ where: { predictedBy: 'result' } });
+  const doneIds = new Set(results.map(r => r.matchId));
+  if (doneIds.has(matchId)) return res.json({ skipped: true, reason: 'already played' });
+
   const { predictMatch } = await import('../lib/predict');
   const existingResults: any[] = allMatches.map(m => {
     const r = results.find(p => p.matchId === m.id);
     return r ? { ...m, homeScore: r.homeScore, awayScore: r.awayScore } : m;
   });
-  let dsCount = 0;
-  const keyMatches = remaining.slice(0, 5); // next 5 upcoming matches
-  for (const m of keyMatches) {
-    try {
-      const pred = await predictMatch(m, existingResults);
-      await prisma.prediction.upsert({
-        where: { matchId_predictedBy: { matchId: m.id, predictedBy: 'ds' } },
-        update: { homeScore: pred.homeScore, awayScore: pred.awayScore },
-        create: { matchId: m.id, homeScore: pred.homeScore, awayScore: pred.awayScore, predictedBy: 'ds', tournamentRound: 'GROUP' },
-      });
-      dsCount++;
-    } catch (e) { console.error(`DS predict failed for ${m.id}:`, e); }
-  }
 
-  res.json({ mc: mcCount, ds: dsCount });
+  const preds = [];
+  for (let v = 1; v <= 3; v++) {
+    try {
+      const pred = await predictMatch(match, existingResults);
+      const p = await prisma.prediction.upsert({
+        where: { matchId_predictedBy_variant: { matchId, predictedBy: 'ds', variant: v } },
+        update: { homeScore: pred.homeScore, awayScore: pred.awayScore },
+        create: { matchId, homeScore: pred.homeScore, awayScore: pred.awayScore, predictedBy: 'ds', variant: v, tournamentRound: 'GROUP' },
+      });
+      preds.push({ variant: v, homeScore: p.homeScore, awayScore: p.awayScore });
+    } catch (e) { console.error(`DS v${v} failed:`, e); }
+  }
+  res.json({ matchId, predictions: preds });
 });
 
-// GET /api/accuracy — compare predictions vs real results
+// GET /api/accuracy — compare predictions vs real results (by model, variant 1 only)
 predictRouter.get('/accuracy', async (_req: Request, res: Response) => {
   const results = await prisma.prediction.findMany({ where: { predictedBy: 'result' } });
-  const preds = await prisma.prediction.findMany({
-    where: { predictedBy: { in: ['mc', 'ds', 'ai', 'user'] } },
-  });
-
-  const stats: Record<string, { total: number; exact: number; direction: number }> = {};
+  const preds = await prisma.prediction.findMany({ where: { predictedBy: { in: ['mc', 'ds', 'user'] }, variant: 1 } });
+  const stats: Record<string, any> = {};
   for (const r of results) {
     for (const p of preds.filter(x => x.matchId === r.matchId)) {
       if (!stats[p.predictedBy]) stats[p.predictedBy] = { total: 0, exact: 0, direction: 0 };
       stats[p.predictedBy].total++;
       if (p.homeScore === r.homeScore && p.awayScore === r.awayScore) stats[p.predictedBy].exact++;
-      const pDir = Math.sign(p.homeScore - p.awayScore);
-      const rDir = Math.sign(r.homeScore - r.awayScore);
-      if (pDir === rDir) stats[p.predictedBy].direction++;
+      if (Math.sign(p.homeScore - p.awayScore) === Math.sign(r.homeScore - r.awayScore)) stats[p.predictedBy].direction++;
     }
   }
-
   res.json(stats);
 });
 

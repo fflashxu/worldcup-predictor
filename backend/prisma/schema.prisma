@@ -13,8 +13,9 @@ model Prediction {
   homeScore       Int
   awayScore       Int
   predictedBy     String
+  variant         Int      @default(1)
   tournamentRound String
   createdAt       DateTime @default(now())
 
-  @@unique([matchId, predictedBy])
+  @@unique([matchId, predictedBy, variant])
 }
