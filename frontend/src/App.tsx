@@ -299,7 +299,9 @@ export default function App() {
                   <h3 className="text-sm font-semibold text-slate-600 mb-3">📋 出线概率 → 淘汰赛落位</h3>
                   <div className="grid grid-cols-4 gap-1.5 text-[10px]">
                     {mc?.groupProbs?.map((gp: any) => {
-                      const t1=gp.teams[0], t2=gp.teams[1], t3=gp.teams[2];
+                      // Find team with highest prob for each position (not array order)
+                      const bestFor = (pos: string) => [...gp.teams].sort((a: any, b: any) => b[pos] - a[pos])[0];
+                      const t1=bestFor('first'), t2=bestFor('second'), t3=bestFor('third');
                       return (
                         <div key={gp.group} className="bg-slate-50 rounded border border-slate-100 p-1.5">
                           <div className="font-bold text-slate-600 mb-0.5">{gp.group}组</div>
@@ -308,12 +310,12 @@ export default function App() {
                             <span className="truncate">{flag(t1?.name)}{t1?.name}</span>
                             <span className="font-mono text-emerald-600 ml-auto">{t1?.first}%</span>
                           </div>
-                          <div className={`flex gap-1 py-0.5 px-1 rounded ${t2?.second>50?'bg-sky-100':''}`}>
+                          <div className={`flex gap-1 py-0.5 px-1 rounded ${t2?.second>40?'bg-sky-100':''}`}>
                             <span className="text-sky-600 font-mono font-bold w-5">2{gp.group}</span>
                             <span className="truncate">{flag(t2?.name)}{t2?.name}</span>
                             <span className="font-mono text-sky-600 ml-auto">{t2?.second}%</span>
                           </div>
-                          <div className={`flex gap-1 py-0.5 px-1 rounded ${t3?.third>30?'bg-amber-100':''}`}>
+                          <div className={`flex gap-1 py-0.5 px-1 rounded ${t3?.third>25?'bg-amber-100':''}`}>
                             <span className="text-amber-600 font-mono font-bold w-5">3{gp.group}</span>
                             <span className="truncate">{flag(t3?.name)}{t3?.name}</span>
                             <span className="font-mono text-amber-600 ml-auto">{t3?.third}%</span>
