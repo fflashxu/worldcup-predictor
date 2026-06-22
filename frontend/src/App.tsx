@@ -52,11 +52,16 @@ function R32Row({ id, slot1, slot2, t1, t2 }: {
 
 function MatchCard({ m, preds, onUserPredict, onMC, onDS }: {
   m: any; preds: Prediction[];
-  onUserPredict: (h: number, a: number) => void;
+  onUserPredict: (v: number, h: number, a: number) => void;
   onMC: () => Promise<any>; onDS: () => Promise<any>;
 }) {
-  const [uh, setUh] = useState(preds.filter(p=>p.predictedBy==='user')[0]?.homeScore ?? 0);
-  const [ua, setUa] = useState(preds.filter(p=>p.predictedBy==='user')[0]?.awayScore ?? 0);
+  const [userScores, setUserScores] = useState(() => {
+    const ups = preds.filter(p => p.predictedBy === 'user').sort((a,b) => (a.variant||1)-(b.variant||1));
+    return [1,2,3].map(v => {
+      const p = ups.find(u => u.variant === v);
+      return { v, h: p?.homeScore ?? 0, a: p?.awayScore ?? 0 };
+    });
+  });
   const [mcLoading, setMcLoading] = useState(false);
   const [dsLoading, setDsLoading] = useState(false);
   const mcPreds = preds.filter(p => p.predictedBy === 'mc');
@@ -70,42 +75,44 @@ function MatchCard({ m, preds, onUserPredict, onMC, onDS }: {
         {m.completed ? (
           <span className="font-mono font-bold text-emerald-700 shrink-0 px-2">{m.homeScore}-{m.awayScore}</span>
         ) : (
-          <>
-            <input type="number" min={0} max={15} value={uh} onChange={e => setUh(Number(e.target.value))}
-              className="w-7 text-center border border-slate-300 rounded text-[11px] py-0.5" />
-            <span className="text-slate-400">-</span>
-            <input type="number" min={0} max={15} value={ua} onChange={e => setUa(Number(e.target.value))}
-              className="w-7 text-center border border-slate-300 rounded text-[11px] py-0.5" />
-          </>
+          <div className="flex gap-0.5">
+            {userScores.map((us, i) => (
+              <div key={i} className="flex items-center gap-0">
+                <span className="text-[8px] text-slate-400 mr-0.5">{i+1}</span>
+                <input type="number" min={0} max={15} value={us.h} onChange={e => {
+                  const ns = [...userScores]; ns[i] = {...ns[i], h: Number(e.target.value)}; setUserScores(ns);
+                }} className="w-6 text-center border border-slate-300 rounded text-[10px] py-0.5" />
+                <span className="text-slate-400 text-[10px]">-</span>
+                <input type="number" min={0} max={15} value={us.a} onChange={e => {
+                  const ns = [...userScores]; ns[i] = {...ns[i], a: Number(e.target.value)}; setUserScores(ns);
+                }} className="w-6 text-center border border-slate-300 rounded text-[10px] py-0.5" />
+              </div>
+            ))}
+          </div>
         )}
         <span className="w-20 truncate text-[11px]">{flag(m.away)} {m.away}</span>
         {!m.completed && (
-          <button onClick={() => onUserPredict(uh, ua)} className="text-[10px] bg-sky-500 hover:bg-sky-600 text-white px-1.5 py-0.5 rounded shrink-0">👤</button>
+          <button onClick={() => userScores.forEach(us => onUserPredict(us.v, us.h, us.a))}
+            className="text-[10px] bg-sky-500 hover:bg-sky-600 text-white px-1.5 py-0.5 rounded shrink-0">👤</button>
         )}
       </div>
-      {/* Model triggers + predictions */}
+      {/* Predictions display row */}
       <div className="flex items-center gap-1 mt-1.5 text-[10px]">
         <button onClick={async () => { setMcLoading(true); await onMC(); setMcLoading(false); }} disabled={m.completed || mcLoading}
-          className={`shrink-0 px-1 rounded ${m.completed ? 'text-slate-300' : mcLoading ? 'text-sky-400 animate-pulse' : 'text-sky-600 hover:bg-sky-50'}`} title="MC数学预测">
-          {mcLoading ? '⏳' : '📊'}
-        </button>
-        {mcLoading ? <span className="text-sky-400 animate-pulse">预测中...</span> :
-          mcPreds.length > 0 ? mcPreds.map(p => (
-            <span key={p.variant} className={`font-mono ${ok(p.homeScore, p.awayScore) ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>{p.homeScore}-{p.awayScore}</span>))
-          : !m.completed && <span className="text-slate-300">点📊预测</span>}
-        {/* User predictions */}
-        {userPreds.map(p => (
-          <span key={`u${p.variant}`} className={`font-mono ${ok(p.homeScore, p.awayScore) ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>👤{p.homeScore}-{p.awayScore}</span>
+          className={`shrink-0 px-1 rounded ${m.completed ? 'text-slate-300' : mcLoading ? 'text-sky-400 animate-pulse' : 'text-sky-600 hover:bg-sky-50'}`}>
+          {mcLoading ? '⏳' : '📊'}</button>
+        {mcPreds.map(p => <span key={p.variant} className={`font-mono ${ok(p.homeScore,p.awayScore)?'text-emerald-600 font-bold':'text-slate-400'}`}>{p.homeScore}-{p.awayScore}</span>)}
+        {!m.completed && mcPreds.length===0 && <span className="text-slate-300">点📊</span>}
+        {userPreds.sort((a,b)=>(a.variant||1)-(b.variant||1)).map(p => (
+          <span key={`u${p.variant}`} className={`font-mono ${ok(p.homeScore,p.awayScore)?'text-emerald-600 font-bold':'text-amber-600'}`}>👤{p.homeScore}-{p.awayScore}</span>
         ))}
         <span className="flex-1"></span>
         <button onClick={async () => { setDsLoading(true); await onDS(); setDsLoading(false); }} disabled={m.completed || dsLoading}
-          className={`shrink-0 px-1 rounded ${m.completed ? 'text-slate-300' : dsLoading ? 'text-purple-400 animate-pulse' : 'text-purple-600 hover:bg-purple-50'}`} title="DeepSeek+体彩赔率">
-          {dsLoading ? '⏳' : '🧠'}
-        </button>
-        {dsLoading ? <span className="text-purple-400 animate-pulse text-[9px]">体彩赔率推理中...</span> :
-          dsPreds.length > 0 ? dsPreds.map(p => (
-            <span key={p.variant} className={`font-mono ${ok(p.homeScore, p.awayScore) ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>{p.homeScore}-{p.awayScore}</span>))
-          : !m.completed && <span className="text-slate-300">点🧠预测</span>}
+          className={`shrink-0 px-1 rounded ${m.completed?'text-slate-300':dsLoading?'text-purple-400 animate-pulse':'text-purple-600 hover:bg-purple-50'}`}>
+          {dsLoading?'⏳':'🧠'}</button>
+        {dsLoading ? <span className="text-purple-400 animate-pulse text-[9px]">体彩推理中...</span> :
+          dsPreds.map(p => <span key={p.variant} className={`font-mono ${ok(p.homeScore,p.awayScore)?'text-emerald-600 font-bold':'text-slate-400'}`}>{p.homeScore}-{p.awayScore}</span>)}
+        {!m.completed && dsPreds.length===0 && <span className="text-slate-300">点🧠</span>}
       </div>
     </div>
   );
@@ -190,7 +197,7 @@ export default function App() {
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
                     {matches.map((m: any) => (
                       <MatchCard key={m.id} m={m} preds={preds?.filter((p: Prediction) => p.matchId === m.id) || []}
-                        onUserPredict={(h, a) => submit.mutate({ matchId: m.id, homeScore: h, awayScore: a, predictedBy: 'user', variant: 1 })}
+                        onUserPredict={(v, h, a) => submit.mutate({ matchId: m.id, homeScore: h, awayScore: a, predictedBy: 'user', variant: v })}
                         onMC={() => api.post(`/predict/mc/${m.id}`).then(() => qc.invalidateQueries({ queryKey: ['predictions'] }))}
                         onDS={() => api.post(`/predict/ds/${m.id}`).then(() => qc.invalidateQueries({ queryKey: ['predictions'] }))}
                       />
