@@ -107,7 +107,7 @@ function MatchCard({ m, preds, onUserPredict, onMC, onDS }: {
 export default function App() {
   const qc = useQueryClient();
   const [tab, setTab] = useState<Tab>('groups');
-  const [aiLoading, setAiLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [activeGroup, setActiveGroup] = useState<string>('A');
 
   const { data: t } = useQuery({ queryKey: ['tournament'], queryFn: () => api.get('/tournament').then(r => r.data) });
@@ -162,10 +162,15 @@ export default function App() {
             </nav>
           </div>
           <button onClick={async () => {
+            setSyncing(true);
             await api.post('/sync');
             qc.invalidateQueries();
-          }} className="text-xs text-slate-400 hover:text-sky-600 border border-slate-200 rounded px-2 py-1">
-            🔄 刷新数据
+            setTimeout(() => setSyncing(false), 1000);
+          }} disabled={syncing}
+          className={`text-xs border rounded px-2 py-1 transition-all ${
+            syncing ? 'text-sky-500 border-sky-300 animate-pulse' : 'text-slate-400 hover:text-sky-600 border-slate-200'
+          }`}>
+            {syncing ? '⏳ 同步中...' : '🔄 刷新数据'}
           </button>
         </div>
       </header>
