@@ -34,15 +34,17 @@ export interface Match {
 }
 
 // Group stage: 72 matches with real dates from openligadb (anchored to FIFA schedule)
-// Date map: matchId → date
+// Date map: matchId → date. Swap map: matchId → true if home/away needs swap (FIFA order)
 let _dateMap: Record<string, string> | null = null;
+let _swapMap: Record<string, boolean> | null = null;
+export const needSwap = (id: string) => _swapMap?.[id] ?? false;
 
 export async function loadDateMap(): Promise<Record<string, string>> {
   if (_dateMap) return _dateMap;
   try {
     const res = await fetch('https://api.openligadb.de/getmatchdata/wm2026/2026');
     const data = await res.json() as any[];
-    _dateMap = {};
+    _dateMap = {}; _swapMap = {};
     const NAME_MAP: Record<string, string> = {
       'Mexiko':'墨西哥','Südafrika':'南非','Südkorea':'韩国','Tschechien':'捷克',
       'Kanada':'加拿大','Bosnien-Herzegowina':'波黑','Katar':'卡塔尔','Schweiz':'瑞士',
@@ -57,33 +59,26 @@ export async function loadDateMap(): Promise<Record<string, string>> {
       'Portugal':'葡萄牙','DR Kongo':'刚果(金)','Usbekistan':'乌兹别克斯坦','Kolumbien':'哥伦比亚',
       'England':'英格兰','Kroatien':'克罗地亚','Ghana':'加纳','Panama':'巴拿马',
     };
-
-    // Build lookup: "home::away" → matchId
     const pairLookup: Record<string, string> = {};
     for (const g of GROUPS) {
       const t = TEAMS[g];
-      const pairs: [number, number][] = [[0,1],[2,3],[0,2],[1,3],[0,3],[1,2]];
       for (let i = 0; i < 6; i++) {
-        const [h, a] = pairs[i];
+        const [h, a] = [[0,1],[2,3],[0,2],[1,3],[0,3],[1,2]][i];
         pairLookup[`${t[h]}::${t[a]}`] = `G-${g}-${i+1}`;
       }
     }
-
     for (const m of data) {
-      const home = NAME_MAP[m.team1.teamName];
-      const away = NAME_MAP[m.team2.teamName];
-      if (home && away) {
-        // Try both directions (openligadb may reverse home/away)
-        const key = `${home}::${away}`;
-        const revKey = `${away}::${home}`;
-        const matchId = pairLookup[key] || pairLookup[revKey];
-        if (matchId) {
-          _dateMap![matchId] = m.matchDateTime.slice(0, 10);
-        }
+      const home = NAME_MAP[m.team1.teamName], away = NAME_MAP[m.team2.teamName];
+      if (!home || !away) continue;
+      const fwd = `${home}::${away}`, rev = `${away}::${home}`;
+      const mid = pairLookup[fwd] || pairLookup[rev];
+      if (mid) {
+        _dateMap![mid] = m.matchDateTime.slice(0, 10);
+        _swapMap![mid] = !!pairLookup[rev]; // true if we matched reverse = need swap
       }
     }
-    console.log(`[dates] Mapped ${Object.keys(_dateMap!).length}/72 matches from openligadb`);
-  } catch (e) { console.error('Failed to load dates from openligadb:', e); }
+    console.log(`[dates] ${Object.keys(_dateMap!).length}/72 matches, ${Object.values(_swapMap!).filter(Boolean).length} swaps`);
+  } catch (e) { console.error('Failed to load dates:', e); }
   return _dateMap || {};
 }
 
@@ -91,15 +86,12 @@ export function generateGroupMatches(): Match[] {
   const matches: Match[] = [];
   for (const g of GROUPS) {
     const t = TEAMS[g];
-    const pairs = [[0,1],[2,3],[0,2],[1,3],[0,3],[1,2]];
-    pairs.forEach(([h,a], i) => {
+    [[0,1],[2,3],[0,2],[1,3],[0,3],[1,2]].forEach(([h,a], i) => {
+      const id = `G-${g}-${i+1}`;
       matches.push({
-        id: `G-${g}-${i+1}`,
-        round: 'GROUP',
-        group: g,
-        home: t[h],
-        away: t[a],
-        date: _dateMap?.[`G-${g}-${i+1}`] || `2026-06-${11 + Math.floor(i/2)}`,
+        id, round: 'GROUP', group: g,
+        home: t[h], away: t[a],
+        date: _dateMap?.[id] || `2026-06-${11 + Math.floor(i/2)}`,
       });
     });
   }

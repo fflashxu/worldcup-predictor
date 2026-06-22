@@ -174,9 +174,9 @@ function poissonSample(lambda: number): number {
   return k - 1;
 }
 
-// GET /api/schedule — full match schedule with real dates from openligadb
+// GET /api/schedule — full match schedule with real dates + home/away from openligadb (CCTV)
 predictRouter.get('/schedule', async (_req: Request, res: Response) => {
-  const { loadDateMap } = await import('../lib/tournament');
+  const { loadDateMap, needSwap } = await import('../lib/tournament');
   await loadDateMap();
   const matches = generateGroupMatches();
   const results = await prisma.prediction.findMany({ where: { predictedBy: 'result' } });
@@ -184,7 +184,16 @@ predictRouter.get('/schedule', async (_req: Request, res: Response) => {
 
   const schedule = matches.map(m => {
     const r = resultMap.get(m.id);
-    return { ...m, homeScore: r?.homeScore, awayScore: r?.awayScore, completed: !!r };
+    // Swap home/away if openligadb order differs from our generated order
+    const swap = needSwap(m.id);
+    return {
+      ...m,
+      home: swap ? m.away : m.home,
+      away: swap ? m.home : m.away,
+      homeScore: swap ? r?.awayScore : r?.homeScore,
+      awayScore: swap ? r?.homeScore : r?.awayScore,
+      completed: !!r,
+    };
   });
 
   const byDate: Record<string, typeof schedule> = {};
