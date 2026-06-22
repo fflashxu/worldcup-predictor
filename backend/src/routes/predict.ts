@@ -38,58 +38,96 @@ predictRouter.post('/predict', async (req: Request, res: Response) => {
   res.json(pred);
 });
 
-// POST /api/predict/ai — trigger DeepSeek prediction
-predictRouter.post('/predict/ai', async (req: Request, res: Response) => {
-  const { matchId } = req.body;
+// POST /api/predict/ai — dual-model: MC Bayesian + DeepSeek (key matches)
+predictRouter.post('/predict/ai', async (_req: Request, res: Response) => {
+  const results = await prisma.prediction.findMany({ where: { predictedBy: 'result' } });
+  const doneIds = new Set(results.map(r => r.matchId));
+  const allMatches = generateGroupMatches();
+  const remaining = allMatches.filter(m => !doneIds.has(m.id));
 
-  // Get existing results from DB
-  const allPreds = await prisma.prediction.findMany();
-  const groupMatches = generateGroupMatches();
-  const existingResults: Match[] = groupMatches.map(m => {
-    // Real results take priority over user predictions for AI context
-    const result = allPreds.find(p => p.matchId === m.id && p.predictedBy === 'result');
-    if (result) return { ...m, homeScore: result.homeScore, awayScore: result.awayScore };
-    return m;
-  });
+  const { computeStandings } = await import('../lib/standings');
+  const currentStandings = await computeStandings();
 
-  if (matchId) {
-    // Predict single match
-    const match = groupMatches.find(m => m.id === matchId);
-    if (!match) return res.status(404).json({ error: 'Match not found' });
-    const pred = await predictMatch(match, existingResults);
-    // Save AI prediction
+  // Phase 1: MC Bayesian for ALL remaining matches
+  let mcCount = 0;
+  for (const m of remaining) {
+    const hλ = estStr(m.home!, currentStandings);
+    const aλ = estStr(m.away!, currentStandings);
     await prisma.prediction.upsert({
-      where: { matchId_predictedBy: { matchId, predictedBy: 'ai' } },
-      update: { homeScore: pred.homeScore, awayScore: pred.awayScore },
-      create: { matchId, homeScore: pred.homeScore, awayScore: pred.awayScore, predictedBy: 'ai', tournamentRound: 'GROUP' },
+      where: { matchId_predictedBy: { matchId: m.id, predictedBy: 'mc' } },
+      update: { homeScore: Math.round(hλ), awayScore: Math.round(aλ) },
+      create: { matchId: m.id, homeScore: Math.round(hλ), awayScore: Math.round(aλ), predictedBy: 'mc', tournamentRound: 'GROUP' },
     });
-    return res.json(pred);
+    mcCount++;
   }
 
-  // Predict all remaining
-  const predictions = await predictTournamentChampion(existingResults);
-  res.json({ predictions, count: predictions.length });
+  // Phase 2: DeepSeek for key matches (next 5, or high-importance)
+  const { predictMatch } = await import('../lib/predict');
+  const existingResults: any[] = allMatches.map(m => {
+    const r = results.find(p => p.matchId === m.id);
+    return r ? { ...m, homeScore: r.homeScore, awayScore: r.awayScore } : m;
+  });
+  let dsCount = 0;
+  const keyMatches = remaining.slice(0, 5); // next 5 upcoming matches
+  for (const m of keyMatches) {
+    try {
+      const pred = await predictMatch(m, existingResults);
+      await prisma.prediction.upsert({
+        where: { matchId_predictedBy: { matchId: m.id, predictedBy: 'ds' } },
+        update: { homeScore: pred.homeScore, awayScore: pred.awayScore },
+        create: { matchId: m.id, homeScore: pred.homeScore, awayScore: pred.awayScore, predictedBy: 'ds', tournamentRound: 'GROUP' },
+      });
+      dsCount++;
+    } catch (e) { console.error(`DS predict failed for ${m.id}:`, e); }
+  }
+
+  res.json({ mc: mcCount, ds: dsCount });
 });
 
-// GET /api/schedule — full match schedule with results
-predictRouter.get('/schedule', async (_req: Request, res: Response) => {
-  const matches = generateGroupMatches();
-  const results = await prisma.prediction.findMany({
-    where: { predictedBy: 'result' },
+// GET /api/accuracy — compare predictions vs real results
+predictRouter.get('/accuracy', async (_req: Request, res: Response) => {
+  const results = await prisma.prediction.findMany({ where: { predictedBy: 'result' } });
+  const preds = await prisma.prediction.findMany({
+    where: { predictedBy: { in: ['mc', 'ds', 'ai', 'user'] } },
   });
+
+  const stats: Record<string, { total: number; exact: number; direction: number }> = {};
+  for (const r of results) {
+    for (const p of preds.filter(x => x.matchId === r.matchId)) {
+      if (!stats[p.predictedBy]) stats[p.predictedBy] = { total: 0, exact: 0, direction: 0 };
+      stats[p.predictedBy].total++;
+      if (p.homeScore === r.homeScore && p.awayScore === r.awayScore) stats[p.predictedBy].exact++;
+      const pDir = Math.sign(p.homeScore - p.awayScore);
+      const rDir = Math.sign(r.homeScore - r.awayScore);
+      if (pDir === rDir) stats[p.predictedBy].direction++;
+    }
+  }
+
+  res.json(stats);
+});
+
+function estStr(team: string, st: Record<string, any[]>): number {
+  const gs = ['A','B','C','D','E','F','G','H','I','J','K','L'];
+  for (const g of gs) {
+    const t = (st[g] || []).find((x: any) => x.name === team);
+    if (t && t.played > 0) return (t.gf + 3.9) / (t.played + 3);
+  }
+  return 1.3;
+}
+
+// GET /api/schedule — full match schedule with real dates from openligadb
+predictRouter.get('/schedule', async (_req: Request, res: Response) => {
+  const { loadDateMap } = await import('../lib/tournament');
+  await loadDateMap();
+  const matches = generateGroupMatches();
+  const results = await prisma.prediction.findMany({ where: { predictedBy: 'result' } });
   const resultMap = new Map(results.map(r => [r.matchId, r]));
 
   const schedule = matches.map(m => {
     const r = resultMap.get(m.id);
-    return {
-      ...m,
-      homeScore: r?.homeScore,
-      awayScore: r?.awayScore,
-      completed: !!r,
-    };
+    return { ...m, homeScore: r?.homeScore, awayScore: r?.awayScore, completed: !!r };
   });
 
-  // Group by date
   const byDate: Record<string, typeof schedule> = {};
   for (const m of schedule) {
     const date = m.date || 'TBD';

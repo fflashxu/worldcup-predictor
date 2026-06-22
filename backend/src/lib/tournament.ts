@@ -33,12 +33,65 @@ export interface Match {
   venue?: string;
 }
 
-// Group stage: 3 rounds per group, 12 groups × 6 matches each = 72 matches
+// Group stage: 72 matches with real dates from openligadb (anchored to FIFA schedule)
+// Date map: matchId → date
+let _dateMap: Record<string, string> | null = null;
+
+export async function loadDateMap(): Promise<Record<string, string>> {
+  if (_dateMap) return _dateMap;
+  try {
+    const res = await fetch('https://api.openligadb.de/getmatchdata/wm2026/2026');
+    const data = await res.json() as any[];
+    _dateMap = {};
+    const NAME_MAP: Record<string, string> = {
+      'Mexiko':'墨西哥','Südafrika':'南非','Südkorea':'韩国','Tschechien':'捷克',
+      'Kanada':'加拿大','Bosnien-Herzegowina':'波黑','Katar':'卡塔尔','Schweiz':'瑞士',
+      'Brasilien':'巴西','Marokko':'摩洛哥','Haiti':'海地','Schottland':'苏格兰',
+      'USA':'美国','Paraguay':'巴拉圭','Australien':'澳大利亚','Türkei':'土耳其',
+      'Deutschland':'德国','Curaçao':'库拉索','Elfenbeinküste':'科特迪瓦','Ecuador':'厄瓜多尔',
+      'Niederlande':'荷兰','Japan':'日本','Schweden':'瑞典','Tunesien':'突尼斯',
+      'Belgien':'比利时','Ägypten':'埃及','Iran':'伊朗','Neuseeland':'新西兰',
+      'Spanien':'西班牙','Kap Verde':'佛得角','Saudi-Arabien':'沙特','Uruguay':'乌拉圭',
+      'Frankreich':'法国','Senegal':'塞内加尔','Irak':'伊拉克','Norwegen':'挪威',
+      'Argentinien':'阿根廷','Algerien':'阿尔及利亚','Österreich':'奥地利','Jordanien':'约旦',
+      'Portugal':'葡萄牙','DR Kongo':'刚果(金)','Usbekistan':'乌兹别克斯坦','Kolumbien':'哥伦比亚',
+      'England':'英格兰','Kroatien':'克罗地亚','Ghana':'加纳','Panama':'巴拿马',
+    };
+
+    // Build lookup: "home::away" → matchId
+    const pairLookup: Record<string, string> = {};
+    for (const g of GROUPS) {
+      const t = TEAMS[g];
+      const pairs: [number, number][] = [[0,1],[2,3],[0,2],[1,3],[0,3],[1,2]];
+      for (let i = 0; i < 6; i++) {
+        const [h, a] = pairs[i];
+        pairLookup[`${t[h]}::${t[a]}`] = `G-${g}-${i+1}`;
+      }
+    }
+
+    for (const m of data) {
+      const home = NAME_MAP[m.team1.teamName];
+      const away = NAME_MAP[m.team2.teamName];
+      if (home && away) {
+        // Try both directions (openligadb may reverse home/away)
+        const key = `${home}::${away}`;
+        const revKey = `${away}::${home}`;
+        const matchId = pairLookup[key] || pairLookup[revKey];
+        if (matchId) {
+          _dateMap![matchId] = m.matchDateTime.slice(0, 10);
+        }
+      }
+    }
+    console.log(`[dates] Mapped ${Object.keys(_dateMap!).length}/72 matches from openligadb`);
+  } catch (e) { console.error('Failed to load dates from openligadb:', e); }
+  return _dateMap || {};
+}
+
 export function generateGroupMatches(): Match[] {
   const matches: Match[] = [];
   for (const g of GROUPS) {
     const t = TEAMS[g];
-    const pairs = [[0,1],[2,3],[0,2],[1,3],[0,3],[1,2]]; // round-robin schedule
+    const pairs = [[0,1],[2,3],[0,2],[1,3],[0,3],[1,2]];
     pairs.forEach(([h,a], i) => {
       matches.push({
         id: `G-${g}-${i+1}`,
@@ -46,7 +99,7 @@ export function generateGroupMatches(): Match[] {
         group: g,
         home: t[h],
         away: t[a],
-        date: `2026-06-${11 + Math.floor(i/2) + (GROUPS.indexOf(g) % 6) * 3}`,
+        date: _dateMap?.[`G-${g}-${i+1}`] || `2026-06-${11 + Math.floor(i/2)}`,
       });
     });
   }

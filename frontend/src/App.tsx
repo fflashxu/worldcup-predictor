@@ -75,12 +75,15 @@ export default function App() {
   });
 
   const getPred = (matchId: string, type: string) => preds?.find((p: Prediction) => p.matchId === matchId && p.predictedBy === type);
+  const { data: accuracy } = useQuery({ queryKey: ['accuracy'], queryFn: () => api.get('/accuracy').then(r => r.data) });
 
   const r32 = ((bracket?.bracket || []) as any[]).reduce((acc: any, s: any) => {
     acc[s.slot.matchId] = s; return acc;
   }, {});
 
-  // R32 grouped by FIFA bracket zones (verified vs 央视/FIFA)
+  // Build opponent probability lookup: matchId → [{team, prob}]
+  const oppLookup: Record<string, any[]> = {};
+  mc?.opponentProbs?.forEach((op: any) => { oppLookup[op.matchId] = op.opponents; });
   // →M101上半区: M74+M77→M89, M73+M75→M90→M97  +  M83+M84→M93, M81+M82→M94→M98
   const upperLeft = ['M74','M77','M76','M78'];
   const upperRight = ['M73','M75','M79','M80'];
@@ -129,8 +132,10 @@ export default function App() {
                   <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-2">
                     {matches.map((m: any) => {
                       const userP = getPred(m.id, 'user');
-                      const aiP = getPred(m.id, 'ai');
-                      const [h, setH] = [userP?.homeScore ?? 0, userP?.awayScore ?? 0];
+                      const mcP = getPred(m.id, 'mc');
+                      const dsP = getPred(m.id, 'ds');
+                      const correct = (pred: Prediction | undefined) => m.completed && pred && pred.homeScore === m.homeScore && pred.awayScore === m.awayScore;
+                      const dirOk = (pred: Prediction | undefined) => m.completed && pred && Math.sign(pred.homeScore - pred.awayScore) === Math.sign((m.homeScore||0) - (m.awayScore||0));
                       return (
                       <div key={m.id} className={`rounded-lg border p-2 text-xs ${
                         m.completed ? 'bg-emerald-50/30 border-emerald-200' : 'bg-white border-slate-200'
@@ -143,18 +148,17 @@ export default function App() {
                           </span>
                           <span className="truncate text-right">{flag(m.away)} {m.away}</span>
                         </div>
-                        {(userP || aiP) && !m.completed && (
-                          <div className="flex gap-2 mt-1.5 text-[10px] text-slate-400 border-t border-slate-100 pt-1.5">
-                            {userP && <span>👤 {userP.homeScore}-{userP.awayScore}</span>}
-                            {aiP && <span>🤖 {aiP.homeScore}-{aiP.awayScore}</span>}
-                          </div>
-                        )}
-                        {(userP || aiP) && m.completed && (
-                          <div className="flex gap-2 mt-1.5 text-[10px] text-slate-400 border-t border-slate-100 pt-1.5">
-                            {userP && <span className={userP.homeScore === m.homeScore && userP.awayScore === m.awayScore ? 'text-emerald-600 font-bold' : 'text-rose-500'}>
-                              👤 {userP.homeScore}-{userP.awayScore}</span>}
-                            {aiP && <span className={aiP.homeScore === m.homeScore && aiP.awayScore === m.awayScore ? 'text-emerald-600 font-bold' : 'text-rose-500'}>
-                              🤖 {aiP.homeScore}-{aiP.awayScore}</span>}
+                        {(userP || mcP || dsP) && (
+                          <div className="flex gap-2 mt-1.5 text-[10px] border-t border-slate-100 pt-1.5 flex-wrap">
+                            {userP && (
+                              <span className={`${correct(userP) ? 'text-emerald-600 font-bold' : dirOk(userP) ? 'text-sky-600' : m.completed ? 'text-rose-400' : 'text-slate-400'}`}>
+                                👤{userP.homeScore}-{userP.awayScore}</span>)}
+                            {mcP && (
+                              <span className={`${correct(mcP) ? 'text-emerald-600 font-bold' : dirOk(mcP) ? 'text-sky-600' : m.completed ? 'text-rose-400' : 'text-slate-400'}`}>
+                                📊{mcP.homeScore}-{mcP.awayScore}</span>)}
+                            {dsP && (
+                              <span className={`${correct(dsP) ? 'text-emerald-600 font-bold' : dirOk(dsP) ? 'text-sky-600' : m.completed ? 'text-rose-400' : 'text-slate-400'}`}>
+                                🧠{dsP.homeScore}-{dsP.awayScore}</span>)}
                           </div>
                         )}
                       </div>
@@ -302,103 +306,163 @@ export default function App() {
               ))}
             </div>
 
-            {/* BRACKET TREE */}
-            <div className="overflow-x-auto">
-              <div className="flex gap-1 items-start min-w-[1300px] text-xs">
-                {/* LEFT SIDE → M101 semifinal */}
-                <div className="flex flex-col gap-1 shrink-0">
-                  <div className="text-[10px] text-sky-600 font-bold text-center mb-2 bg-sky-50 rounded py-1">⬆ 上半区</div>
-                  {upperLeft.map(id => (
-                    <R32Row key={id} id={id} slot1={(r32[id]?.slot?.home||'')} slot2={(r32[id]?.slot?.away||'')}
-                      t1={r32[id]?.homeTeam||null} t2={r32[id]?.awayTeam||null} />
-                  ))}
+            {/* BRACKET TREE: Classic tournament layout */}
+            <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 overflow-x-auto">
+              <div className="flex gap-2 items-start min-w-[1100px] text-[11px]">
+                {/* Col-1: R32 left (→M101 upper) */}
+                <div className="flex flex-col gap-1 w-[140px]">
+                  <div className="text-[10px] font-bold text-sky-600 mb-1 px-1">⬆ 上半区 · 1/16决赛</div>
+                  {upperLeft.map(id => <BracketSlotView key={id} id={id} r32={r32} opps={oppLookup[id]} />)}
                 </div>
-                <div className="flex flex-col gap-1 shrink-0">
-                  <div className="text-[10px] text-sky-600 font-bold text-center mb-2 bg-sky-50 rounded py-1 opacity-0">.</div>
-                  {upperRight.map(id => (
-                    <R32Row key={id} id={id} slot1={(r32[id]?.slot?.home||'')} slot2={(r32[id]?.slot?.away||'')}
-                      t1={r32[id]?.homeTeam||null} t2={r32[id]?.awayTeam||null} />
-                  ))}
+                <div className="flex flex-col gap-1 w-[140px] pt-5">
+                  {upperRight.map(id => <BracketSlotView key={id} id={id} r32={r32} opps={oppLookup[id]} />)}
                 </div>
-                {/* R16 */}
-                <div className="flex flex-col gap-1 shrink-0 pt-5">
-                  <div className="text-[10px] text-slate-400 text-center mb-1">1/8</div>
-                  {['M89','M90','M91','M92'].map(id => (
-                    <div key={id} className="bg-slate-50 border border-dashed border-slate-200 rounded p-1.5 text-center text-slate-400 text-[10px] min-w-[55px]">{id}<br/>待定</div>
-                  ))}
+                {/* R16 → M101 */}
+                <div className="flex flex-col gap-1 w-[110px] pt-5">
+                  <div className="text-[10px] text-slate-400 text-center mb-1">1/8决赛</div>
+                  {['M89','M90','M91','M92'].map(id => <EmptyBox key={id} id={id} />)}
                 </div>
-                {/* QF */}
-                <div className="flex flex-col gap-1 shrink-0 pt-8">
-                  <div className="text-[10px] text-slate-400 text-center mb-1">1/4</div>
-                  <div className="bg-slate-50 border border-dashed border-slate-200 rounded p-2 text-center text-slate-400 text-[10px]">M97<br/>待定</div>
-                  <Spacer /><Spacer />
-                  <div className="bg-slate-50 border border-dashed border-slate-200 rounded p-2 text-center text-slate-400 text-[10px] mt-4">M99<br/>待定</div>
+                {/* QF → SF */}
+                <div className="flex flex-col gap-1 w-[100px] pt-7">
+                  <div className="text-[10px] text-slate-400 text-center mb-1">1/4决赛</div>
+                  {['M97','M99'].map(id => <EmptyBox key={id} id={id} />)}
                 </div>
-                {/* M101 SF */}
-                <div className="flex flex-col justify-center shrink-0 pt-10">
+                {/* SF → M101 */}
+                <div className="flex flex-col justify-center w-[100px] pt-9">
                   <div className="text-[10px] text-slate-400 text-center mb-1">半决赛</div>
-                  <div className="bg-sky-50 border border-sky-200 rounded p-3 text-center">
+                  <div className="bg-sky-50 border border-sky-200 rounded-lg p-2.5 text-center">
                     <div className="font-mono text-[10px] text-sky-500">M101</div>
                   </div>
                 </div>
-                {/* FINAL */}
-                <div className="flex flex-col justify-center shrink-0">
-                  <div className="bg-gradient-to-b from-yellow-100 to-yellow-50 border-2 border-yellow-400 rounded-xl p-4 text-center shadow-sm min-w-[90px]">
+                {/* FINAL center */}
+                <div className="flex flex-col justify-center w-[110px] gap-4 pt-4">
+                  {mc && (
+                    <div className="bg-white border border-slate-100 rounded-lg p-2">
+                      <div className="text-[10px] text-slate-400 mb-1">🏆 夺冠概率</div>
+                      {mc.champion.slice(0, 5).map((t: any) => (
+                        <div key={t.team} className="flex items-center gap-1 text-[10px]">
+                          <span>{flag(t.team)}</span>
+                          <span className="flex-1 truncate text-slate-600">{t.team}</span>
+                          <span className="font-mono font-bold text-sky-600">{t.probability}%</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <div className="bg-gradient-to-b from-yellow-100 to-yellow-50 border-2 border-yellow-400 rounded-xl p-3 text-center">
                     <div className="text-[10px] text-yellow-600 font-mono">M104</div>
-                    <div className="text-sm font-bold text-yellow-700 mt-1">🏆 决赛</div>
-                    <div className="text-[10px] text-slate-400 mt-1">7/19 纽约</div>
+                    <div className="text-sm font-bold text-yellow-700">🏆 决赛</div>
+                    <div className="text-[10px] text-slate-400">7/19 纽约</div>
                   </div>
                 </div>
-                {/* M102 SF */}
-                <div className="flex flex-col justify-center shrink-0 pt-10">
+                {/* SF → M102 */}
+                <div className="flex flex-col justify-center w-[100px] pt-9">
                   <div className="text-[10px] text-slate-400 text-center mb-1">半决赛</div>
-                  <div className="bg-rose-50 border border-rose-200 rounded p-3 text-center">
+                  <div className="bg-rose-50 border border-rose-200 rounded-lg p-2.5 text-center">
                     <div className="font-mono text-[10px] text-rose-500">M102</div>
                   </div>
                 </div>
-                {/* QF right */}
-                <div className="flex flex-col gap-1 shrink-0 pt-8">
-                  <div className="text-[10px] text-slate-400 text-center mb-1">1/4</div>
-                  <div className="bg-slate-50 border border-dashed border-slate-200 rounded p-2 text-center text-slate-400 text-[10px]">M98<br/>待定</div>
-                  <Spacer /><Spacer />
-                  <div className="bg-slate-50 border border-dashed border-slate-200 rounded p-2 text-center text-slate-400 text-[10px] mt-4">M100<br/>待定</div>
+                {/* QF → M102 */}
+                <div className="flex flex-col gap-1 w-[100px] pt-7">
+                  <div className="text-[10px] text-slate-400 text-center mb-1">1/4决赛</div>
+                  {['M98','M100'].map(id => <EmptyBox key={id} id={id} />)}
                 </div>
-                {/* R16 right */}
-                <div className="flex flex-col gap-1 shrink-0 pt-5">
-                  <div className="text-[10px] text-slate-400 text-center mb-1">1/8</div>
-                  {['M93','M94','M95','M96'].map(id => (
-                    <div key={id} className="bg-slate-50 border border-dashed border-slate-200 rounded p-1.5 text-center text-slate-400 text-[10px] min-w-[55px]">{id}<br/>待定</div>
-                  ))}
+                {/* R16 → M102 */}
+                <div className="flex flex-col gap-1 w-[110px] pt-5">
+                  <div className="text-[10px] text-slate-400 text-center mb-1">1/8决赛</div>
+                  {['M93','M94','M95','M96'].map(id => <EmptyBox key={id} id={id} />)}
                 </div>
-                {/* R32 right */}
-                <div className="flex flex-col gap-1 shrink-0">
-                  <div className="text-[10px] text-rose-600 font-bold text-center mb-2 bg-rose-50 rounded py-1">⬇ 下半区</div>
-                  {lowerLeft.map(id => (
-                    <R32Row key={id} id={id} slot1={(r32[id]?.slot?.home||'')} slot2={(r32[id]?.slot?.away||'')}
-                      t1={r32[id]?.homeTeam||null} t2={r32[id]?.awayTeam||null} />
-                  ))}
+                {/* Col-8: R32 right (→M102 lower) */}
+                <div className="flex flex-col gap-1 w-[140px] pt-5">
+                  <div className="text-[10px] text-slate-400 text-center mb-1 opacity-0">.</div>
+                  {lowerLeft.map(id => <BracketSlotView key={id} id={id} r32={r32} opps={oppLookup[id]} />)}
                 </div>
-                <div className="flex flex-col gap-1 shrink-0">
-                  <div className="text-[10px] text-rose-600 font-bold text-center mb-2 bg-rose-50 rounded py-1 opacity-0">.</div>
-                  {lowerRight.map(id => (
-                    <R32Row key={id} id={id} slot1={(r32[id]?.slot?.home||'')} slot2={(r32[id]?.slot?.away||'')}
-                      t1={r32[id]?.homeTeam||null} t2={r32[id]?.awayTeam||null} />
-                  ))}
+                <div className="flex flex-col gap-1 w-[140px]">
+                  <div className="text-[10px] font-bold text-rose-600 mb-1 px-1">⬇ 下半区 · 1/16决赛</div>
+                  {lowerRight.map(id => <BracketSlotView key={id} id={id} r32={r32} opps={oppLookup[id]} />)}
                 </div>
-                {/* 3rd place */}
-                <div className="flex flex-col justify-end shrink-0 ml-1">
-                  <div className="bg-slate-100 border border-slate-300 rounded-xl p-3 text-center min-w-[70px]">
+                {/* 3rd Place */}
+                <div className="flex flex-col justify-end w-[90px] ml-1">
+                  <div className="bg-slate-100 border border-slate-300 rounded-xl p-2 text-center">
                     <div className="text-[10px] text-slate-500 font-mono">M103</div>
-                    <div className="text-xs font-semibold text-slate-600 mt-1">🥉 季军赛</div>
+                    <div className="text-xs font-semibold text-slate-600 mt-0.5">🥉 季军赛</div>
                   </div>
                 </div>
               </div>
             </div>
 
-            <p className="text-xs text-slate-400">⬆ 上半区 · ⬇ 下半区 · 1/16→1/8→1/4→半决赛→决赛 · 季军赛 · 基于 Annex C 规则实时推演</p>
+            {/* Accuracy Panel */}
+            {accuracy && Object.keys(accuracy).length > 0 && (
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+                <h3 className="text-sm font-semibold text-slate-600 mb-3">🎯 模型准确率对比（预测方向）</h3>
+                <div className="space-y-2 text-xs">
+                  {Object.entries(accuracy as Record<string,any>).map(([model, s]) => (
+                    <div key={model} className="flex items-center gap-3">
+                      <span className="w-12 text-slate-500">{model === 'mc' ? '📊 MC' : model === 'ds' ? '🧠 DS' : model === 'user' ? '👤 你' : model}</span>
+                      <div className="flex-1 bg-slate-100 rounded-full h-4">
+                        <div className={`h-4 rounded-full text-[10px] text-white text-right pr-1 leading-4 font-mono ${(s.direction/s.total*100) > 60 ? 'bg-emerald-500' : 'bg-sky-500'}`}
+                          style={{width: `${Math.max(s.direction/s.total*100, 5)}%`}}>
+                          {s.total > 0 ? `${Math.round(s.direction/s.total*100)}%` : ''}
+                        </div>
+                      </div>
+                      <span className="text-slate-400 w-16 text-right">{s.direction}/{s.total} 场</span>
+                      {s.exact > 0 && <span className="text-amber-500 text-[10px]">⭐{s.exact}场精确</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            <p className="text-xs text-slate-400">R32每队右侧数字 = Monte Carlo {mc?.totalSims || 10000}次模拟出线概率。绿=大概率出线(&gt;40%) 蓝=可能 灰=低概率</p>
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+function BracketSlotView({ id, r32, opps }: { id: string; r32: Record<string, any>; opps?: any[] }) {
+  const s = r32[id];
+  const getOppProb = (team: string | null) => {
+    if (!team || !opps) return null;
+    const found = opps.find((o: any) => o.team === team);
+    return found?.prob || null;
+  };
+  const homeProb = getOppProb(s?.homeTeam);
+  const awayProb = getOppProb(s?.awayTeam);
+
+  return (
+    <div className="bg-white border border-slate-200 rounded px-1.5 py-1">
+      <div className="flex items-center justify-between gap-1">
+        <span className="flex items-center gap-1 truncate text-[11px]">
+          <span className="text-[10px]">{flag(s?.homeTeam||'')}</span>
+          <span className="truncate text-slate-700">{s?.homeTeam || s?.slot?.home || '待定'}</span>
+        </span>
+        {homeProb !== null && (
+          <span className={`font-mono text-[10px] shrink-0 ${homeProb > 40 ? 'text-emerald-600 font-bold' : homeProb > 15 ? 'text-sky-600' : 'text-slate-400'}`}>
+            {homeProb}%
+          </span>
+        )}
+      </div>
+      <div className="border-t border-slate-100 my-0.5"></div>
+      <div className="flex items-center justify-between gap-1">
+        <span className="flex items-center gap-1 truncate text-[11px]">
+          <span className="text-[10px]">{flag(s?.awayTeam||'')}</span>
+          <span className="truncate text-slate-700">{s?.awayTeam || s?.slot?.away || '待定'}</span>
+        </span>
+        {awayProb !== null && (
+          <span className={`font-mono text-[10px] shrink-0 ${awayProb > 40 ? 'text-emerald-600 font-bold' : awayProb > 15 ? 'text-sky-600' : 'text-slate-400'}`}>
+            {awayProb}%
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function EmptyBox({ id }: { id: string }) {
+  return (
+    <div className="bg-slate-50 border border-dashed border-slate-200 rounded p-1.5 text-center text-slate-400 text-[10px]">
+      {id}<br/>待定
     </div>
   );
 }

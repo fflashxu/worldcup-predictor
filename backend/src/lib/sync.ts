@@ -1,7 +1,7 @@
 // ⚠️ DATA INTEGRITY RULE: sole data source = openligadb.de (anchored to 央视/FIFA)
 // Never manually inject results. Never use WebSearch fallback.
 // All match data flows through syncFromOpenLiga() only.
-import { generateGroupMatches, TEAMS, GROUPS, Group } from './tournament';
+import { generateGroupMatches, TEAMS, GROUPS, Group, loadDateMap } from './tournament';
 import { injectResults } from './datasource';
 
 const OPENLIGADB_URL = 'https://api.openligadb.de/getmatchdata/wm2026/2026';
@@ -76,6 +76,7 @@ export async function syncFromOpenLiga(): Promise<{ total: number; newResults: n
 // Schedule auto-sync every 5 minutes + data integrity check
 export function startAutoSync() {
   console.log('[sync] Auto-sync started (every 5min, source: openligadb /2026)');
+  loadDateMap().then(() => console.log('[sync] 📅 Match dates loaded'));
   syncFromOpenLiga().then(r => {
     console.log(`[sync] Initial: ${r.total} finished, ${r.newResults} new`);
     if (r.total > 0 && r.newResults === 0) console.log('[sync] ✓ Data already up to date');
