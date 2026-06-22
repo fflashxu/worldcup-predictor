@@ -467,30 +467,26 @@ function BracketSlotView({ id, r32, opps }: { id: string; r32: Record<string, an
   };
   const homeProb = getOppProb(s?.homeTeam);
   const awayProb = getOppProb(s?.awayTeam);
+  const homeCode = s?.slot?.home || '';
+  const awayCode = s?.slot?.away || '';
 
   return (
     <div className="bg-white border border-slate-200 rounded px-1.5 py-1">
-      <div className="flex items-center justify-between gap-1">
-        <span className="flex items-center gap-1 truncate text-[11px]">
-          <span className="text-[10px]">{flag(s?.homeTeam||'')}</span>
-          <span className="truncate text-slate-700">{s?.homeTeam || s?.slot?.home || '待定'}</span>
-        </span>
+      <div className="flex items-center gap-1">
+        <span className="text-[10px] font-mono text-slate-400 w-7 shrink-0">{homeCode}</span>
+        <span className="text-[10px]">{flag(s?.homeTeam||'')}</span>
+        <span className="flex-1 truncate text-[11px] text-slate-700">{s?.homeTeam || '待定'}</span>
         {homeProb !== null && (
-          <span className={`font-mono text-[10px] shrink-0 ${homeProb > 40 ? 'text-emerald-600 font-bold' : homeProb > 15 ? 'text-sky-600' : 'text-slate-400'}`}>
-            {homeProb}%
-          </span>
+          <span className={`font-mono text-[10px] shrink-0 ${homeProb > 40 ? 'text-emerald-600 font-bold' : homeProb > 15 ? 'text-sky-600' : 'text-slate-400'}`}>{homeProb}%</span>
         )}
       </div>
       <div className="border-t border-slate-100 my-0.5"></div>
-      <div className="flex items-center justify-between gap-1">
-        <span className="flex items-center gap-1 truncate text-[11px]">
-          <span className="text-[10px]">{flag(s?.awayTeam||'')}</span>
-          <span className="truncate text-slate-700">{s?.awayTeam || s?.slot?.away || '待定'}</span>
-        </span>
+      <div className="flex items-center gap-1">
+        <span className="text-[10px] font-mono text-slate-400 w-7 shrink-0">{awayCode}</span>
+        <span className="text-[10px]">{flag(s?.awayTeam||'')}</span>
+        <span className="flex-1 truncate text-[11px] text-slate-700">{s?.awayTeam || '待定'}</span>
         {awayProb !== null && (
-          <span className={`font-mono text-[10px] shrink-0 ${awayProb > 40 ? 'text-emerald-600 font-bold' : awayProb > 15 ? 'text-sky-600' : 'text-slate-400'}`}>
-            {awayProb}%
-          </span>
+          <span className={`font-mono text-[10px] shrink-0 ${awayProb > 40 ? 'text-emerald-600 font-bold' : awayProb > 15 ? 'text-sky-600' : 'text-slate-400'}`}>{awayProb}%</span>
         )}
       </div>
     </div>
