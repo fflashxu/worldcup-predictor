@@ -53,13 +53,14 @@ function R32Row({ id, slot1, slot2, t1, t2 }: {
 function MatchCard({ m, preds, onUserPredict, onMC, onDS }: {
   m: any; preds: Prediction[];
   onUserPredict: (h: number, a: number) => void;
-  onMC: () => void; onDS: () => void;
+  onMC: () => Promise<any>; onDS: () => Promise<any>;
 }) {
   const [uh, setUh] = useState(preds.filter(p=>p.predictedBy==='user')[0]?.homeScore ?? 0);
   const [ua, setUa] = useState(preds.filter(p=>p.predictedBy==='user')[0]?.awayScore ?? 0);
+  const [mcLoading, setMcLoading] = useState(false);
+  const [dsLoading, setDsLoading] = useState(false);
   const mcPreds = preds.filter(p => p.predictedBy === 'mc');
   const dsPreds = preds.filter(p => p.predictedBy === 'ds');
-  const userPreds = preds.filter(p => p.predictedBy === 'user');
   const ok = (h: number, a: number) => m.completed && h === m.homeScore && a === m.awayScore;
   return (
     <div className={`rounded-lg border p-2 text-xs ${m.completed ? 'bg-emerald-50/30 border-emerald-200' : 'bg-white border-slate-200'}`}>
@@ -83,23 +84,23 @@ function MatchCard({ m, preds, onUserPredict, onMC, onDS }: {
       </div>
       {/* Model triggers + predictions */}
       <div className="flex items-center gap-1 mt-1.5 text-[10px]">
-        {/* MC row */}
-        <button onClick={onMC} disabled={m.completed}
-          className={`shrink-0 px-1 rounded ${m.completed ? 'text-slate-300' : 'text-sky-600 hover:bg-sky-50'}`} title="MC数学预测">📊</button>
-        {mcPreds.map(p => (
-          <span key={p.variant} className={`font-mono ${ok(p.homeScore, p.awayScore) ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
-            {p.homeScore}-{p.awayScore}</span>
-        ))}
-        {!m.completed && mcPreds.length === 0 && <span className="text-slate-300">点📊预测</span>}
+        <button onClick={async () => { setMcLoading(true); await onMC(); setMcLoading(false); }} disabled={m.completed || mcLoading}
+          className={`shrink-0 px-1 rounded ${m.completed ? 'text-slate-300' : mcLoading ? 'text-sky-400 animate-pulse' : 'text-sky-600 hover:bg-sky-50'}`} title="MC数学预测">
+          {mcLoading ? '⏳' : '📊'}
+        </button>
+        {mcLoading ? <span className="text-sky-400 animate-pulse">预测中...</span> :
+          mcPreds.length > 0 ? mcPreds.map(p => (
+            <span key={p.variant} className={`font-mono ${ok(p.homeScore, p.awayScore) ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>{p.homeScore}-{p.awayScore}</span>))
+          : !m.completed && <span className="text-slate-300">点📊预测</span>}
         <span className="flex-1"></span>
-        {/* DS row */}
-        <button onClick={onDS} disabled={m.completed}
-          className={`shrink-0 px-1 rounded ${m.completed ? 'text-slate-300' : 'text-purple-600 hover:bg-purple-50'}`} title="DeepSeek推理">🧠</button>
-        {dsPreds.map(p => (
-          <span key={p.variant} className={`font-mono ${ok(p.homeScore, p.awayScore) ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>
-            {p.homeScore}-{p.awayScore}</span>
-        ))}
-        {!m.completed && dsPreds.length === 0 && <span className="text-slate-300">点🧠预测</span>}
+        <button onClick={async () => { setDsLoading(true); await onDS(); setDsLoading(false); }} disabled={m.completed || dsLoading}
+          className={`shrink-0 px-1 rounded ${m.completed ? 'text-slate-300' : dsLoading ? 'text-purple-400 animate-pulse' : 'text-purple-600 hover:bg-purple-50'}`} title="DeepSeek+体彩赔率">
+          {dsLoading ? '⏳' : '🧠'}
+        </button>
+        {dsLoading ? <span className="text-purple-400 animate-pulse text-[9px]">体彩赔率推理中...</span> :
+          dsPreds.length > 0 ? dsPreds.map(p => (
+            <span key={p.variant} className={`font-mono ${ok(p.homeScore, p.awayScore) ? 'text-emerald-600 font-bold' : 'text-slate-400'}`}>{p.homeScore}-{p.awayScore}</span>))
+          : !m.completed && <span className="text-slate-300">点🧠预测</span>}
       </div>
     </div>
   );
