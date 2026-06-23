@@ -77,21 +77,20 @@ export async function syncFromOpenLiga(): Promise<{ total: number; newResults: n
 
 // Schedule auto-sync every 5 minutes + data integrity check
 export function startAutoSync() {
-  console.log('[sync] Auto-sync started (every 5min, source: openligadb /2026)');
+  console.log('[sync] Auto-sync started (every 5min, 3 sources)');
   loadDateMap().then(() => console.log('[sync] 📅 Match dates loaded'));
-  syncFromOpenLiga().then(r => {
-    console.log(`[sync] Initial: ${r.total} finished, ${r.newResults} new`);
-    if (r.total > 0 && r.newResults === 0) console.log('[sync] ✓ Data already up to date');
-  });
 
-  setInterval(async () => {
+  const runAll = async () => {
     try {
-      const r = await syncFromOpenLiga();
-      if (r.newResults > 0) {
-        console.log(`[sync] 🆕 ${r.newResults} new results injected (total: ${r.total})`);
-      }
-    } catch (e) {
-      console.error('[sync] ❌ Error:', e);
-    }
-  }, 5 * 60 * 1000); // Every 5 minutes — openligadb lags 1-3h behind live
+      const r1 = await syncFromOpenLiga();
+      if (r1.newResults > 0) console.log(`[sync] openligadb: ${r1.newResults} new (total: ${r1.total})`);
+
+      const { syncFromNews } = await import('./news-sync');
+      const r2 = await syncFromNews();
+      if (r2 > 0) console.log(`[sync] sporttery: ${r2} new results`);
+    } catch (e) { console.error('[sync] Error:', e); }
+  };
+
+  runAll();
+  setInterval(runAll, 5 * 60 * 1000);
 }

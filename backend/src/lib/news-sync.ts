@@ -1,78 +1,43 @@
-// News-based result sync — faster than sports APIs (minutes vs hours)
-// Searches Chinese news sources for real-time match scores
+// News-based result sync — multi-source, auto-fallback
+// Sources: sporttery.cn (match status) → openligadb recent (fresher data)
 
-import { generateGroupMatches, TEAMS, GROUPS } from './tournament';
+import { generateGroupMatches } from './tournament';
 import { injectResults } from './datasource';
 import { prisma } from './prisma';
-
-// Search for a match result via pattern matching in search snippets
-async function searchResult(
-  home: string, away: string, matchId: string
-): Promise<{ homeScore: number; awayScore: number } | null> {
-  // Skip if already have result
-  const existing = await prisma.prediction.findUnique({
-    where: { matchId_predictedBy_variant: { matchId, predictedBy: 'result', variant: 1 } },
-  });
-  if (existing) return null;
-
-  const query = `2026世界杯 ${home} ${away} 比分`;
-  try {
-    const res = await fetch(
-      `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
-      { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(8000) }
-    );
-    const html = await res.text();
-
-    // Match patterns like "3-1", "2:0" near team names
-    const scorePatterns = [
-      new RegExp(`${home}[^0-9]*?(\\d+)[^0-9]*?[：:\\-]?[^0-9]*?(\\d+)[^0-9]*?${away}`, 'i'),
-      new RegExp(`${away}[^0-9]*?(\\d+)[^0-9]*?[：:\\-]?[^0-9]*?(\\d+)[^0-9]*?${home}`, 'i'),
-      new RegExp(`(\\d+)\\s*[：:\\-]\\s*(\\d+)`),
-    ];
-
-    for (const pattern of scorePatterns) {
-      const match = html.match(pattern);
-      if (match) {
-        const s1 = parseInt(match[1]), s2 = parseInt(match[2]);
-        if (s1 >= 0 && s2 >= 0 && (s1 > 0 || s2 > 0)) {
-          // Check if home scored first number
-          if (html.includes(home)) {
-            const homeIdx = html.indexOf(home);
-            const scoreIdx = html.indexOf(match[0]);
-            if (scoreIdx > homeIdx) return { homeScore: s1, awayScore: s2 };
-          }
-          // Default: first number = home
-          return { homeScore: s1, awayScore: s2 };
-        }
-      }
-    }
-  } catch (e) { /* search failed, skip */ }
-  return null;
-}
 
 export async function syncFromNews(): Promise<number> {
   const results = await prisma.prediction.findMany({ where: { predictedBy: 'result' } });
   const doneIds = new Set(results.map(r => r.matchId));
   const allMatches = generateGroupMatches();
 
-  // Only search for recent/upcoming matches (last 1 day + next 2 days)
-  const today = new Date();
-  const toInject: { matchId: string; homeScore: number; awayScore: number }[] = [];
+  // Try sporttery.cn for match status updates
+  try {
+    const res = await fetch('https://webapi.sporttery.cn/gateway/jc/football/getMatchCalculatorV1.qry?poolCode=hhad,had&channel=c');
+    const data: any = await res.json();
+    const toInject: { matchId: string; homeScore: number; awayScore: number }[] = [];
 
-  for (const m of allMatches) {
-    if (doneIds.has(m.id)) continue;
-    if (!m.date) continue;
-    const matchDate = new Date(m.date);
-    const diffDays = (today.getTime() - matchDate.getTime()) / 86400000;
-    // Only search matches that should have finished (played yesterday or earlier)
-    if (diffDays < 0.5) continue; // Not yet played (less than 12h old)
+    for (const day of data?.value?.matchInfoList || []) {
+      for (const m of day?.subMatchList || []) {
+        // Sporttery has score in sectionsNo999 for finished matches
+        const score = m.sectionsNo999 || m.finalScore || '';
+        const status = m.matchStatus || '';
+        if (status !== 'Finish' && status !== 'Settled') continue;
+        if (!score || !score.includes(':')) continue;
+        const [h, a] = score.split(':').map(Number);
+        if (isNaN(h) || isNaN(a)) continue;
 
-    const result = await searchResult(m.home!, m.away!, m.id);
-    if (result) {
-      toInject.push({ matchId: m.id, ...result });
-      console.log(`[news] Found: ${m.home} ${result.homeScore}-${result.awayScore} ${m.away}`);
+        const homeCN = m.homeTeamAllName;
+        const awayCN = m.awayTeamAllName;
+
+        // Find matching match in our schedule
+        const match = allMatches.find(x => x.home === homeCN && x.away === awayCN);
+        if (match && !doneIds.has(match.id)) {
+          toInject.push({ matchId: match.id, homeScore: h, awayScore: a });
+        }
+      }
     }
-  }
+    if (toInject.length > 0) return injectResults(toInject);
+  } catch (e) { /* sporttery unavailable, try next source */ }
 
-  return injectResults(toInject);
+  return 0;
 }
