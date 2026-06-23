@@ -514,12 +514,12 @@ export default function App() {
                           // Group by matchId
                           const byMatch: Record<string, any> = {};
                           (accuracy as any).details.forEach((d: any) => {
-                            if (!byMatch[d.matchId]) byMatch[d.matchId] = { home: d.home, away: d.away, real: d.realScore, preds: {} };
+                            if (!byMatch[d.matchId]) byMatch[d.matchId] = { date: d.date, home: d.home, away: d.away, real: d.realScore, preds: {} };
                             byMatch[d.matchId].preds[d.predictedBy] = { score: d.predScore, ok: d.directionOk, exact: d.exact };
                           });
                           return Object.entries(byMatch).map(([mid, m]) => (
                             <tr key={mid} className="border-b border-slate-50">
-                              <td className="py-1 pr-2 text-slate-600">{flag(m.home)}{m.home} vs {flag(m.away)}{m.away}</td>
+                              <td className="py-1 pr-2 text-slate-500">{m.date}<br/><span className="text-slate-600">{flag(m.home)}{m.home} vs {flag(m.away)}{m.away}</span></td>
                               <td className="text-center py-1 px-1 font-mono font-bold">{m.real}</td>
                               {['user', 'mc', 'ds'].map(model => {
                                 const p = m.preds[model];

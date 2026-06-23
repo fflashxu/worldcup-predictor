@@ -167,6 +167,7 @@ predictRouter.get('/accuracy', async (_req: Request, res: Response) => {
 
       details.push({
         matchId: r.matchId,
+        date: match.date,
         home: match.home,
         away: match.away,
         realScore: `${r.homeScore}-${r.awayScore}`,
