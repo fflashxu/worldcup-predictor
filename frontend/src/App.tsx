@@ -477,24 +477,66 @@ export default function App() {
             </div>
 
             {/* Accuracy Panel */}
-            {accuracy && Object.keys(accuracy).length > 0 && (
+            {accuracy && (
               <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-                <h3 className="text-sm font-semibold text-slate-600 mb-3">🎯 模型准确率对比（预测方向）</h3>
-                <div className="space-y-2 text-xs">
-                  {Object.entries(accuracy as Record<string,any>).map(([model, s]) => (
+                <h3 className="text-sm font-semibold text-slate-600 mb-3">🎯 模型准确率对比（6/22起）</h3>
+                {/* Summary bars */}
+                <div className="space-y-2 text-xs mb-4">
+                  {(accuracy as any).stats && Object.entries((accuracy as any).stats as Record<string,any>).map(([model, s]) => (
                     <div key={model} className="flex items-center gap-3">
-                      <span className="w-12 text-slate-500">{model === 'mc' ? '📊 MC' : model === 'ds' ? '🧠 DS' : model === 'user' ? '👤 你' : model}</span>
+                      <span className="w-12 text-slate-500">{model === 'mc' ? '📊 MC' : model === 'ds' ? '🧠 DS' : '👤 你'}</span>
                       <div className="flex-1 bg-slate-100 rounded-full h-4">
                         <div className={`h-4 rounded-full text-[10px] text-white text-right pr-1 leading-4 font-mono ${(s.direction/s.total*100) > 60 ? 'bg-emerald-500' : 'bg-sky-500'}`}
                           style={{width: `${Math.max(s.direction/s.total*100, 5)}%`}}>
                           {s.total > 0 ? `${Math.round(s.direction/s.total*100)}%` : ''}
                         </div>
                       </div>
-                      <span className="text-slate-400 w-16 text-right">{s.direction}/{s.total} 场</span>
-                      {s.exact > 0 && <span className="text-amber-500 text-[10px]">⭐{s.exact}场精确</span>}
+                      <span className="text-slate-400 w-16 text-right">{s.direction}/{s.total}</span>
+                      {s.exact > 0 && <span className="text-amber-500 text-[10px]">⭐{s.exact}</span>}
                     </div>
                   ))}
                 </div>
+                {/* Detail table */}
+                {(accuracy as any).details?.length > 0 && (
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-[11px]">
+                      <thead>
+                        <tr className="text-slate-400 border-b border-slate-100">
+                          <th className="text-left py-1 pr-2">比赛</th>
+                          <th className="text-center py-1 px-1">真实</th>
+                          <th className="text-center py-1 px-1">👤</th>
+                          <th className="text-center py-1 px-1">📊</th>
+                          <th className="text-center py-1 px-1">🧠</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(() => {
+                          // Group by matchId
+                          const byMatch: Record<string, any> = {};
+                          (accuracy as any).details.forEach((d: any) => {
+                            if (!byMatch[d.matchId]) byMatch[d.matchId] = { home: d.home, away: d.away, real: d.realScore, preds: {} };
+                            byMatch[d.matchId].preds[d.predictedBy] = { score: d.predScore, ok: d.directionOk, exact: d.exact };
+                          });
+                          return Object.entries(byMatch).map(([mid, m]) => (
+                            <tr key={mid} className="border-b border-slate-50">
+                              <td className="py-1 pr-2 text-slate-600">{flag(m.home)}{m.home} vs {flag(m.away)}{m.away}</td>
+                              <td className="text-center py-1 px-1 font-mono font-bold">{m.real}</td>
+                              {['user', 'mc', 'ds'].map(model => {
+                                const p = m.preds[model];
+                                if (!p) return <td key={model} className="text-center py-1 px-1 text-slate-300">-</td>;
+                                return (
+                                  <td key={model} className={`text-center py-1 px-1 font-mono ${p.exact ? 'text-emerald-600 font-bold' : p.ok ? 'text-sky-600' : 'text-rose-400'}`}>
+                                    {p.score}{p.exact ? '⭐' : p.ok ? '✓' : '✗'}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          ));
+                        })()}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
               </div>
             )}
 

@@ -142,23 +142,43 @@ predictRouter.post('/predict/ds/:matchId', async (req: Request, res: Response) =
   res.json({ matchId, predictions: preds });
 });
 
-// GET /api/accuracy — compare predictions vs real results (from June 22 Beijing time)
+// GET /api/accuracy — compare predictions vs real results with match details (from June 22 Beijing)
 predictRouter.get('/accuracy', async (_req: Request, res: Response) => {
-  const cutoff = new Date('2026-06-21T16:00:00Z'); // June 22 00:00 Beijing time
+  const cutoff = new Date('2026-06-21T16:00:00Z');
   const results = await prisma.prediction.findMany({ where: { predictedBy: 'result' } });
+  const allMatches = generateGroupMatches();
   const preds = await prisma.prediction.findMany({
     where: { predictedBy: { in: ['mc', 'ds', 'user'] }, variant: 1, createdAt: { gte: cutoff } },
   });
+
   const stats: Record<string, any> = {};
+  const details: any[] = [];
+
   for (const r of results) {
+    const match = allMatches.find(m => m.id === r.matchId);
+    if (!match) continue;
     for (const p of preds.filter(x => x.matchId === r.matchId)) {
       if (!stats[p.predictedBy]) stats[p.predictedBy] = { total: 0, exact: 0, direction: 0 };
       stats[p.predictedBy].total++;
-      if (p.homeScore === r.homeScore && p.awayScore === r.awayScore) stats[p.predictedBy].exact++;
-      if (Math.sign(p.homeScore - p.awayScore) === Math.sign(r.homeScore - r.awayScore)) stats[p.predictedBy].direction++;
+      const exact = p.homeScore === r.homeScore && p.awayScore === r.awayScore;
+      const dirOk = Math.sign(p.homeScore - p.awayScore) === Math.sign(r.homeScore - r.awayScore);
+      if (exact) stats[p.predictedBy].exact++;
+      if (dirOk) stats[p.predictedBy].direction++;
+
+      details.push({
+        matchId: r.matchId,
+        home: match.home,
+        away: match.away,
+        realScore: `${r.homeScore}-${r.awayScore}`,
+        predictedBy: p.predictedBy,
+        predScore: `${p.homeScore}-${p.awayScore}`,
+        exact,
+        directionOk: dirOk,
+      });
     }
   }
-  res.json(stats);
+
+  res.json({ stats, details });
 });
 
 function estStr(team: string, st: Record<string, any[]>): number {
