@@ -142,10 +142,13 @@ predictRouter.post('/predict/ds/:matchId', async (req: Request, res: Response) =
   res.json({ matchId, predictions: preds });
 });
 
-// GET /api/accuracy — compare predictions vs real results (by model, variant 1 only)
+// GET /api/accuracy — compare predictions vs real results (from June 22 Beijing time)
 predictRouter.get('/accuracy', async (_req: Request, res: Response) => {
+  const cutoff = new Date('2026-06-21T16:00:00Z'); // June 22 00:00 Beijing time
   const results = await prisma.prediction.findMany({ where: { predictedBy: 'result' } });
-  const preds = await prisma.prediction.findMany({ where: { predictedBy: { in: ['mc', 'ds', 'user'] }, variant: 1 } });
+  const preds = await prisma.prediction.findMany({
+    where: { predictedBy: { in: ['mc', 'ds', 'user'] }, variant: 1, createdAt: { gte: cutoff } },
+  });
   const stats: Record<string, any> = {};
   for (const r of results) {
     for (const p of preds.filter(x => x.matchId === r.matchId)) {
