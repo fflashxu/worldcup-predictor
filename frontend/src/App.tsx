@@ -51,6 +51,36 @@ function R32Row({ id, slot1, slot2, t1, t2 }: {
   );
 }
 
+function QuickInject({ qc }: { qc: any }) {
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const [msg, setMsg] = useState('');
+  if (!open) return <button onClick={() => setOpen(true)} className="text-xs text-slate-400 hover:text-rose-500 border border-dashed border-slate-200 rounded px-2 py-1">✏️ 录入赛果</button>;
+  return (
+    <div className="fixed inset-0 bg-black/30 z-50 flex items-center justify-center" onClick={() => setOpen(false)}>
+      <div className="bg-white rounded-xl shadow-xl p-4 w-96" onClick={e => e.stopPropagation()}>
+        <h3 className="text-sm font-semibold mb-2">📝 手动录入赛果</h3>
+        <p className="text-[10px] text-slate-400 mb-2">每行格式：matchId 主队分 客队分（空格分隔）</p>
+        <textarea className="w-full border rounded p-2 text-xs font-mono h-32" value={text}
+          placeholder={`G-I-3 3 0\nG-I-4 3 2`}
+          onChange={e => setText(e.target.value)} />
+        <div className="flex gap-2 mt-2">
+          <button className="bg-sky-500 text-white text-xs px-3 py-1.5 rounded" onClick={async () => {
+            const lines = text.trim().split('\n').filter(Boolean);
+            const results = lines.map(l => { const [id,h,a]=l.split(/\s+/); return {matchId:id,homeScore:+h,awayScore:+a}; });
+            await api.post('/results/batch', { results });
+            setMsg(`已录入 ${results.length} 场`);
+            qc.invalidateQueries();
+            setTimeout(() => { setOpen(false); setMsg(''); setText(''); }, 1500);
+          }}>提交录入</button>
+          <button className="text-xs text-slate-400" onClick={() => setOpen(false)}>取消</button>
+        </div>
+        {msg && <p className="text-emerald-600 text-xs mt-1">{msg}</p>}
+      </div>
+    </div>
+  );
+}
+
 function MatchCard({ m, preds, onUserPredict, onMC, onDS }: {
   m: any; preds: Prediction[];
   onUserPredict: (h: number, a: number) => void;  // auto-advances variant
@@ -161,17 +191,20 @@ export default function App() {
               ))}
             </nav>
           </div>
-          <button onClick={async () => {
-            setSyncing(true);
-            await api.post('/sync');
-            qc.invalidateQueries();
-            setTimeout(() => setSyncing(false), 1000);
-          }} disabled={syncing}
-          className={`text-xs border rounded px-2 py-1 transition-all ${
-            syncing ? 'text-sky-500 border-sky-300 animate-pulse' : 'text-slate-400 hover:text-sky-600 border-slate-200'
-          }`}>
-            {syncing ? '⏳ 同步中...' : '🔄 刷新数据'}
-          </button>
+          <div className="flex items-center gap-2">
+            <button onClick={async () => {
+              setSyncing(true);
+              await api.post('/sync');
+              qc.invalidateQueries();
+              setTimeout(() => setSyncing(false), 1000);
+            }} disabled={syncing}
+            className={`text-xs border rounded px-2 py-1 transition-all ${
+              syncing ? 'text-sky-500 border-sky-300 animate-pulse' : 'text-slate-400 hover:text-sky-600 border-slate-200'
+            }`}>
+              {syncing ? '⏳ 同步中...' : '🔄 同步数据'}
+            </button>
+            <QuickInject qc={qc} />
+          </div>
         </div>
       </header>
 
