@@ -476,8 +476,31 @@ export default function App() {
               </div>
             </div>
 
-        )}
+            {/* Accuracy Panel */}
+            {accuracy && Object.keys(accuracy).length > 0 && (
+              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
+                <h3 className="text-sm font-semibold text-slate-600 mb-3">🎯 模型准确率对比（预测方向）</h3>
+                <div className="space-y-2 text-xs">
+                  {Object.entries(accuracy as Record<string,any>).map(([model, s]) => (
+                    <div key={model} className="flex items-center gap-3">
+                      <span className="w-12 text-slate-500">{model === 'mc' ? '📊 MC' : model === 'ds' ? '🧠 DS' : model === 'user' ? '👤 你' : model}</span>
+                      <div className="flex-1 bg-slate-100 rounded-full h-4">
+                        <div className={`h-4 rounded-full text-[10px] text-white text-right pr-1 leading-4 font-mono ${(s.direction/s.total*100) > 60 ? 'bg-emerald-500' : 'bg-sky-500'}`}
+                          style={{width: `${Math.max(s.direction/s.total*100, 5)}%`}}>
+                          {s.total > 0 ? `${Math.round(s.direction/s.total*100)}%` : ''}
+                        </div>
+                      </div>
+                      <span className="text-slate-400 w-16 text-right">{s.direction}/{s.total} 场</span>
+                      {s.exact > 0 && <span className="text-amber-500 text-[10px]">⭐{s.exact}场精确</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
 
+            <p className="text-xs text-slate-400">R32每队右侧数字 = Monte Carlo {mc?.totalSims || 10000}次模拟出线概率。绿=大概率出线(&gt;40%) 蓝=可能 灰=低概率</p>
+          </div>
+        )}
         {/* ACCURACY TAB */}
         {tab === 'accuracy' && (
           <div className="space-y-6 max-w-4xl mx-auto">
@@ -500,36 +523,27 @@ export default function App() {
                 {(accuracy as any).details?.length > 0 && (
                   <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 overflow-x-auto">
                     <table className="w-full text-[11px]">
-                      <thead>
-                        <tr className="text-slate-400 border-b border-slate-100">
-                          <th className="text-left py-2 pr-2">日期</th>
-                          <th className="text-left py-2 pr-2">比赛</th>
-                          <th className="text-center py-2 px-1">真实</th>
-                          <th className="text-center py-2 px-1">👤</th>
-                          <th className="text-center py-2 px-1">📊 MC</th>
-                          <th className="text-center py-2 px-1">🧠 DS</th>
-                        </tr>
-                      </thead>
+                      <thead><tr className="text-slate-400 border-b border-slate-100">
+                        <th className="text-left py-2 pr-2">日期</th><th className="text-left py-2 pr-2">比赛</th>
+                        <th className="text-center py-2 px-1">真实</th><th className="text-center py-2 px-1">👤</th>
+                        <th className="text-center py-2 px-1">📊</th><th className="text-center py-2 px-1">🧠</th>
+                      </tr></thead>
                       <tbody>
                         {(() => {
-                          const byMatch: Record<string, any> = {};
+                          const bm: Record<string, any> = {};
                           (accuracy as any).details.forEach((d: any) => {
-                            if (!byMatch[d.matchId]) byMatch[d.matchId] = { date: d.date, home: d.home, away: d.away, real: d.realScore, preds: {} };
-                            byMatch[d.matchId].preds[d.predictedBy] = { score: d.predScore, ok: d.directionOk, exact: d.exact };
+                            if (!bm[d.matchId]) bm[d.matchId] = { date: d.date, home: d.home, away: d.away, real: d.realScore, preds: {} };
+                            bm[d.matchId].preds[d.predictedBy] = { score: d.predScore, ok: d.directionOk, exact: d.exact };
                           });
-                          return Object.entries(byMatch).map(([mid, m]) => (
+                          return Object.entries(bm).map(([mid, m]) => (
                             <tr key={mid} className="border-b border-slate-50">
                               <td className="py-1.5 pr-2 text-slate-400 whitespace-nowrap">{m.date}</td>
                               <td className="py-1.5 pr-2 text-slate-600">{flag(m.home)}{m.home} vs {flag(m.away)}{m.away}</td>
                               <td className="text-center py-1.5 px-1 font-mono font-bold">{m.real}</td>
-                              {['user', 'mc', 'ds'].map(model => {
+                              {['user','mc','ds'].map(model => {
                                 const p = m.preds[model];
                                 if (!p) return <td key={model} className="text-center py-1.5 px-1 text-slate-300">-</td>;
-                                return (
-                                  <td key={model} className={`text-center py-1.5 px-1 font-mono text-xs ${p.exact ? 'text-emerald-600 font-bold bg-emerald-50 rounded' : p.ok ? 'text-sky-600' : 'text-rose-400'}`}>
-                                    {p.score}{p.exact ? '⭐' : p.ok ? '✓' : '✗'}
-                                  </td>
-                                );
+                                return <td key={model} className={`text-center py-1.5 px-1 font-mono text-xs ${p.exact?'text-emerald-600 font-bold bg-emerald-50 rounded':p.ok?'text-sky-600':'text-rose-400'}`}>{p.score}{p.exact?'⭐':p.ok?'✓':'✗'}</td>;
                               })}
                             </tr>
                           ));
@@ -540,14 +554,6 @@ export default function App() {
                 )}
               </>
             ) : <div className="text-slate-400 text-sm">尚无预测数据。先到赛程页面对比赛点击 📊 或 🧠 生成预测。</div>}
-          </div>
-                    </table>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <p className="text-xs text-slate-400">R32每队右侧数字 = Monte Carlo {mc?.totalSims || 10000}次模拟出线概率。绿=大概率出线(&gt;40%) 蓝=可能 灰=低概率</p>
           </div>
         )}
       </main>
