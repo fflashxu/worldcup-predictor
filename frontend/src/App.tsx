@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { flag } from './lib/flags';
 
 const api = axios.create({ baseURL: '/api' });
-type Tab = 'schedule' | 'groups' | 'bracket';
+type Tab = 'schedule' | 'groups' | 'bracket' | 'accuracy';
 
 interface Standing { name: string; pts: number; gd: number; gf: number; played: number; position: number; }
 interface Prediction { id: string; matchId: string; homeScore: number; awayScore: number; predictedBy: string; }
@@ -182,11 +182,11 @@ export default function App() {
           <div className="flex items-center gap-4">
             <span className="text-lg font-bold text-sky-600">⚽ 2026 世界杯预测</span>
             <nav className="flex gap-1">
-              {(['schedule', 'groups', 'bracket'] as Tab[]).map(t_ => (
+              {(['schedule', 'groups', 'bracket', 'accuracy'] as Tab[]).map(t_ => (
                 <button key={t_} onClick={() => setTab(t_)}
                   className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
                     tab === t_ ? 'bg-sky-500 text-white' : 'text-slate-500 hover:bg-slate-100'}`}>
-                  {t_ === 'schedule' ? '赛程' : t_ === 'groups' ? '小组赛 & 积分' : '淘汰赛对阵'}
+                  {t_ === 'schedule' ? '赛程' : t_ === 'groups' ? '小组赛 & 积分' : t_ === 'bracket' ? '淘汰赛对阵' : '🎯 准确率'}
                 </button>
               ))}
             </nav>
@@ -476,42 +476,42 @@ export default function App() {
               </div>
             </div>
 
-            {/* Accuracy Panel */}
-            {accuracy && (
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-                <h3 className="text-sm font-semibold text-slate-600 mb-3">🎯 模型准确率对比（6/22起）</h3>
-                {/* Summary bars */}
-                <div className="space-y-2 text-xs mb-4">
-                  {(accuracy as any).stats && Object.entries((accuracy as any).stats as Record<string,any>).map(([model, s]) => (
-                    <div key={model} className="flex items-center gap-3">
-                      <span className="w-12 text-slate-500">{model === 'mc' ? '📊 MC' : model === 'ds' ? '🧠 DS' : '👤 你'}</span>
-                      <div className="flex-1 bg-slate-100 rounded-full h-4">
-                        <div className={`h-4 rounded-full text-[10px] text-white text-right pr-1 leading-4 font-mono ${(s.direction/s.total*100) > 60 ? 'bg-emerald-500' : 'bg-sky-500'}`}
-                          style={{width: `${Math.max(s.direction/s.total*100, 5)}%`}}>
-                          {s.total > 0 ? `${Math.round(s.direction/s.total*100)}%` : ''}
-                        </div>
+        )}
+
+        {/* ACCURACY TAB */}
+        {tab === 'accuracy' && (
+          <div className="space-y-6 max-w-4xl mx-auto">
+            <h2 className="text-sm font-semibold text-slate-500">🎯 模型准确率（6/22 北京时间起）</h2>
+            {accuracy && (accuracy as any).stats ? (
+              <>
+                <div className="grid grid-cols-3 gap-4 text-xs">
+                  {Object.entries((accuracy as any).stats as Record<string,any>).map(([model, s]) => (
+                    <div key={model} className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 text-center">
+                      <div className="text-2xl mb-1">{model === 'mc' ? '📊' : model === 'ds' ? '🧠' : '👤'}</div>
+                      <div className="font-bold text-slate-700">{model === 'mc' ? 'Monte Carlo' : model === 'ds' ? 'DeepSeek' : '你的预测'}</div>
+                      <div className="text-3xl font-bold mt-2" style={{color: (s.direction/s.total*100)>60?'#059669':'#0284c7'}}>
+                        {Math.round(s.direction/s.total*100)}%
                       </div>
-                      <span className="text-slate-400 w-16 text-right">{s.direction}/{s.total}</span>
-                      {s.exact > 0 && <span className="text-amber-500 text-[10px]">⭐{s.exact}</span>}
+                      <div className="text-slate-400 mt-1">方向正确率 ({s.direction}/{s.total})</div>
+                      <div className="text-amber-500 text-xs mt-1">⭐ 精确命中 {s.exact} 场</div>
                     </div>
                   ))}
                 </div>
-                {/* Detail table */}
                 {(accuracy as any).details?.length > 0 && (
-                  <div className="overflow-x-auto">
+                  <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4 overflow-x-auto">
                     <table className="w-full text-[11px]">
                       <thead>
                         <tr className="text-slate-400 border-b border-slate-100">
-                          <th className="text-left py-1 pr-2">比赛</th>
-                          <th className="text-center py-1 px-1">真实</th>
-                          <th className="text-center py-1 px-1">👤</th>
-                          <th className="text-center py-1 px-1">📊</th>
-                          <th className="text-center py-1 px-1">🧠</th>
+                          <th className="text-left py-2 pr-2">日期</th>
+                          <th className="text-left py-2 pr-2">比赛</th>
+                          <th className="text-center py-2 px-1">真实</th>
+                          <th className="text-center py-2 px-1">👤</th>
+                          <th className="text-center py-2 px-1">📊 MC</th>
+                          <th className="text-center py-2 px-1">🧠 DS</th>
                         </tr>
                       </thead>
                       <tbody>
                         {(() => {
-                          // Group by matchId
                           const byMatch: Record<string, any> = {};
                           (accuracy as any).details.forEach((d: any) => {
                             if (!byMatch[d.matchId]) byMatch[d.matchId] = { date: d.date, home: d.home, away: d.away, real: d.realScore, preds: {} };
@@ -519,13 +519,14 @@ export default function App() {
                           });
                           return Object.entries(byMatch).map(([mid, m]) => (
                             <tr key={mid} className="border-b border-slate-50">
-                              <td className="py-1 pr-2 text-slate-500">{m.date}<br/><span className="text-slate-600">{flag(m.home)}{m.home} vs {flag(m.away)}{m.away}</span></td>
-                              <td className="text-center py-1 px-1 font-mono font-bold">{m.real}</td>
+                              <td className="py-1.5 pr-2 text-slate-400 whitespace-nowrap">{m.date}</td>
+                              <td className="py-1.5 pr-2 text-slate-600">{flag(m.home)}{m.home} vs {flag(m.away)}{m.away}</td>
+                              <td className="text-center py-1.5 px-1 font-mono font-bold">{m.real}</td>
                               {['user', 'mc', 'ds'].map(model => {
                                 const p = m.preds[model];
-                                if (!p) return <td key={model} className="text-center py-1 px-1 text-slate-300">-</td>;
+                                if (!p) return <td key={model} className="text-center py-1.5 px-1 text-slate-300">-</td>;
                                 return (
-                                  <td key={model} className={`text-center py-1 px-1 font-mono ${p.exact ? 'text-emerald-600 font-bold' : p.ok ? 'text-sky-600' : 'text-rose-400'}`}>
+                                  <td key={model} className={`text-center py-1.5 px-1 font-mono text-xs ${p.exact ? 'text-emerald-600 font-bold bg-emerald-50 rounded' : p.ok ? 'text-sky-600' : 'text-rose-400'}`}>
                                     {p.score}{p.exact ? '⭐' : p.ok ? '✓' : '✗'}
                                   </td>
                                 );
@@ -534,6 +535,12 @@ export default function App() {
                           ));
                         })()}
                       </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
+            ) : <div className="text-slate-400 text-sm">尚无预测数据。先到赛程页面对比赛点击 📊 或 🧠 生成预测。</div>}
+          </div>
                     </table>
                   </div>
                 )}

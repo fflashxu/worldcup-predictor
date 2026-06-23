@@ -88,9 +88,12 @@ export function generateGroupMatches(): Match[] {
     const t = TEAMS[g];
     [[0,1],[2,3],[0,2],[1,3],[0,3],[1,2]].forEach(([h,a], i) => {
       const id = `G-${g}-${i+1}`;
+      // Swap home/away if openligadb order differs — data integrity
+      const swap = _swapMap?.[id] ?? false;
       matches.push({
         id, round: 'GROUP', group: g,
-        home: t[h], away: t[a],
+        home: swap ? t[a] : t[h],
+        away: swap ? t[h] : t[a],
         date: _dateMap?.[id] || `2026-06-${11 + Math.floor(i/2)}`,
       });
     });
