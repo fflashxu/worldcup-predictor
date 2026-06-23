@@ -446,28 +446,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Accuracy Panel */}
-            {accuracy && Object.keys(accuracy).length > 0 && (
-              <div className="bg-white rounded-xl border border-slate-200 shadow-sm p-4">
-                <h3 className="text-sm font-semibold text-slate-600 mb-3">🎯 模型准确率对比（预测方向）</h3>
-                <div className="space-y-2 text-xs">
-                  {Object.entries(accuracy as Record<string,any>).map(([model, s]) => (
-                    <div key={model} className="flex items-center gap-3">
-                      <span className="w-12 text-slate-500">{model === 'mc' ? '📊 MC' : model === 'ds' ? '🧠 DS' : model === 'user' ? '👤 你' : model}</span>
-                      <div className="flex-1 bg-slate-100 rounded-full h-4">
-                        <div className={`h-4 rounded-full text-[10px] text-white text-right pr-1 leading-4 font-mono ${(s.direction/s.total*100) > 60 ? 'bg-emerald-500' : 'bg-sky-500'}`}
-                          style={{width: `${Math.max(s.direction/s.total*100, 5)}%`}}>
-                          {s.total > 0 ? `${Math.round(s.direction/s.total*100)}%` : ''}
-                        </div>
-                      </div>
-                      <span className="text-slate-400 w-16 text-right">{s.direction}/{s.total} 场</span>
-                      {s.exact > 0 && <span className="text-amber-500 text-[10px]">⭐{s.exact}场精确</span>}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-
             <p className="text-xs text-slate-400">R32每队右侧数字 = Monte Carlo {mc?.totalSims || 10000}次模拟出线概率。绿=大概率出线(&gt;40%) 蓝=可能 灰=低概率</p>
           </div>
         )}
