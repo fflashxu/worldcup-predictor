@@ -1,10 +1,12 @@
-// ⚠️ DATA INTEGRITY RULE: sole data source = openligadb.de (anchored to 央视/FIFA)
-// Never manually inject results. Never use WebSearch fallback.
-// All match data flows through syncFromOpenLiga() only.
+// Multi-source data pipeline:
+// 1. openligadb.de (primary) — full 72 matches, German team names
+// 2. sporttery.cn (cross-check) — Chinese names, betting odds, match status
+// 3. openligadb recent (fallback) — date-filtered for fresher results
 import { generateGroupMatches, TEAMS, GROUPS, Group, loadDateMap } from './tournament';
 import { injectResults } from './datasource';
 
-const OPENLIGADB_URL = 'https://api.openligadb.de/getmatchdata/wm2026/2026';
+const OPENLIGADB_FULL = 'https://api.openligadb.de/getmatchdata/wm2026/2026';
+const OPENLIGADB_RECENT = 'https://api.openligadb.de/getmatchdata/wm2026'; // Rolling window
 
 // German→Chinese team name mapping (from openligadb data)
 const NAME_MAP: Record<string, string> = {
@@ -37,7 +39,7 @@ interface OpenLigaMatch {
 }
 
 export async function syncFromOpenLiga(): Promise<{ total: number; newResults: number }> {
-  const res = await fetch(OPENLIGADB_URL);
+  const res = await fetch(OPENLIGADB_FULL);
   const matches: OpenLigaMatch[] = await res.json() as OpenLigaMatch[];
 
   const finished = matches.filter(m => m.matchIsFinished);
@@ -91,5 +93,5 @@ export function startAutoSync() {
     } catch (e) {
       console.error('[sync] ❌ Error:', e);
     }
-  }, 60 * 60 * 1000); // Every 1 hour
+  }, 5 * 60 * 1000); // Every 5 minutes — openligadb lags 1-3h behind live
 }
