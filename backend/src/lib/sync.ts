@@ -92,5 +92,5 @@ export function startAutoSync() {
   };
 
   runAll();
-  setInterval(runAll, 5 * 60 * 1000);
+  setInterval(runAll, 360 * 60 * 1000); // 6 hours — manual sync button for instant updates
 }
