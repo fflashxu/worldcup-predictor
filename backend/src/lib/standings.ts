@@ -117,8 +117,8 @@ export async function resolveBracket(): Promise<{
 
   return pairs.map(([matchId, slotHome, slotAway]) => {
     // Extract group letter from slot code: "1A"→"A", "2B"→"B", "3D"→"D"
-    const gHome = slotHome.slice(-1);
-    const gAway = slotAway.slice(-1);
+    const gHome = slotHome.slice(-1) as Group;
+    const gAway = slotAway.slice(-1) as Group;
     const homeTeam = slotHome.startsWith('1') ? wm.get(gHome) || gHome
       : slotHome.startsWith('2') ? rm.get(gHome) || gHome
       : qualifyingThirds.find(t => t.group === gAway)?.name || gHome;

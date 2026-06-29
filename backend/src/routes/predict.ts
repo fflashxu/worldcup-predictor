@@ -1,6 +1,6 @@
 import { Router, Request, Response } from 'express';
 import { prisma } from '../lib/prisma';
-import { generateGroupMatches, R32_BRACKET, GROUPS, TEAMS, Match } from '../lib/tournament';
+import { generateGroupMatches, generateKnockoutMatches, R32_BRACKET, GROUPS, TEAMS, Match } from '../lib/tournament';
 import { predictMatch, predictTournamentChampion } from '../lib/predict';
 
 export const predictRouter = Router();
@@ -202,7 +202,9 @@ function poissonSample(lambda: number): number {
 predictRouter.get('/schedule', async (_req: Request, res: Response) => {
   const { loadDateMap } = await import('../lib/tournament');
   await loadDateMap();
-  const matches = generateGroupMatches();
+  const groupMatches = generateGroupMatches();
+  const knockoutMatches = generateKnockoutMatches();
+  const matches = [...groupMatches, ...knockoutMatches];
   const results = await prisma.prediction.findMany({ where: { predictedBy: 'result' } });
   const resultMap = new Map(results.map(r => [r.matchId, r]));
 

@@ -101,30 +101,52 @@ export function generateGroupMatches(): Match[] {
   return matches;
 }
 
-// R32 bracket mapping (verified against 懂球帝)
-// Matches M73-M88 in FIFA official numbering
-interface R32Slot {
-  matchId: string;
-  home: string;   // slot code like "1A"=Winner A, "2B"=Runner-up B, "3?"=Best 3rd
-  away: string;
+// Knockout stage: all matches from R32 to Final
+// M73-M104 in FIFA official numbering
+export function generateKnockoutMatches(): Match[] {
+  const matches: Match[] = [];
+
+  // R32 (M73-M88) — CCTV-verified pairings
+  const r32Pairs: [string, string, string, string][] = [
+    ['M73','南非','加拿大','2026-06-29'], ['M74','德国','巴拉圭','2026-06-30'],
+    ['M75','荷兰','摩洛哥','2026-06-30'], ['M76','巴西','日本','2026-06-30'],
+    ['M77','法国','瑞典','2026-07-01'], ['M78','科特迪瓦','挪威','2026-07-01'],
+    ['M79','墨西哥','厄瓜多尔','2026-07-01'], ['M80','英格兰','刚果(金)','2026-07-02'],
+    ['M81','美国','波黑','2026-07-02'], ['M82','比利时','塞内加尔','2026-07-02'],
+    ['M83','葡萄牙','克罗地亚','2026-07-03'], ['M84','西班牙','奥地利','2026-07-02'],
+    ['M85','瑞士','阿尔及利亚','2026-07-03'], ['M86','阿根廷','佛得角','2026-07-04'],
+    ['M87','哥伦比亚','加纳','2026-07-04'], ['M88','澳大利亚','埃及','2026-07-04'],
+  ];
+  for (const [id, home, away, date] of r32Pairs) {
+    matches.push({ id, round: 'R32', home, away, date });
+  }
+
+  // R16 (M89-M96), QF (M97-M100), SF (M101-M102), Final (M104), 3rd (M103)
+  const later: [string, string, string | null, string | null, string][] = [
+    ['M89','R16','','','2026-07-05'],['M90','R16','','','2026-07-05'],['M91','R16','','','2026-07-06'],['M92','R16','','','2026-07-06'],
+    ['M93','R16','','','2026-07-07'],['M94','R16','','','2026-07-07'],['M95','R16','','','2026-07-08'],['M96','R16','','','2026-07-08'],
+    ['M97','QF','','','2026-07-09'],['M98','QF','','','2026-07-10'],['M99','QF','','','2026-07-11'],['M100','QF','','','2026-07-11'],
+    ['M101','SF','','','2026-07-14'],['M102','SF','','','2026-07-15'],
+    ['M103','THIRD','','','2026-07-18'],['M104','FINAL','','','2026-07-19'],
+  ];
+  for (const [id, round, , , date] of later) {
+    matches.push({ id, round: round as any, home: null, away: null, date });
+  }
+
+  return matches;
 }
+
+// R32 bracket mapping (verified against 懂球帝)
+interface R32Slot { matchId: string; home: string; away: string; }
 export const R32_BRACKET: R32Slot[] = [
-  { matchId: 'M73', home: '2A', away: '2B' },
-  { matchId: 'M74', home: '1E', away: '3?' },
-  { matchId: 'M75', home: '1F', away: '2C' },
-  { matchId: 'M76', home: '1C', away: '2F' },
-  { matchId: 'M77', home: '1I', away: '3?' },
-  { matchId: 'M78', home: '2E', away: '2I' },
-  { matchId: 'M79', home: '1A', away: '3?' },
-  { matchId: 'M80', home: '1L', away: '3?' },
-  { matchId: 'M81', home: '1D', away: '3?' },
-  { matchId: 'M82', home: '1G', away: '3?' },
-  { matchId: 'M83', home: '2K', away: '2L' },
-  { matchId: 'M84', home: '1H', away: '2J' },
-  { matchId: 'M85', home: '1B', away: '3?' },
-  { matchId: 'M86', home: '1J', away: '2H' },
-  { matchId: 'M87', home: '1K', away: '3?' },
-  { matchId: 'M88', home: '2D', away: '2G' },
+  { matchId: 'M73', home: '2A', away: '2B' },{ matchId: 'M74', home: '1E', away: '3?' },
+  { matchId: 'M75', home: '1F', away: '2C' },{ matchId: 'M76', home: '1C', away: '2F' },
+  { matchId: 'M77', home: '1I', away: '3?' },{ matchId: 'M78', home: '2E', away: '2I' },
+  { matchId: 'M79', home: '1A', away: '3?' },{ matchId: 'M80', home: '1L', away: '3?' },
+  { matchId: 'M81', home: '1D', away: '3?' },{ matchId: 'M82', home: '1G', away: '3?' },
+  { matchId: 'M83', home: '2K', away: '2L' },{ matchId: 'M84', home: '1H', away: '2J' },
+  { matchId: 'M85', home: '1B', away: '3?' },{ matchId: 'M86', home: '1J', away: '2H' },
+  { matchId: 'M87', home: '1K', away: '3?' },{ matchId: 'M88', home: '2D', away: '2G' },
 ];
 
 // R32 → R16 → QF → SF → Final path
