@@ -368,10 +368,10 @@ export default function App() {
                 {/* Col-1: R32 left (→M101 upper) */}
                 <div className="flex flex-col gap-1 w-[140px]">
                   <div className="text-[10px] font-bold text-sky-600 mb-1 px-1">⬆ 上半区 · 1/16决赛</div>
-                  {upperLeft.map(id => <BracketSlotView key={id} id={id} r32={r32} opps={oppLookup[id]} />)}
+                  {upperLeft.map(id => <BracketSlotView key={id} id={id} r32={r32} opps={oppLookup[id]} preds={preds} />)}
                 </div>
                 <div className="flex flex-col gap-1 w-[140px] pt-5">
-                  {upperRight.map(id => <BracketSlotView key={id} id={id} r32={r32} opps={oppLookup[id]} />)}
+                  {upperRight.map(id => <BracketSlotView key={id} id={id} r32={r32} opps={oppLookup[id]} preds={preds} />)}
                 </div>
                 {/* R16 → M101 */}
                 <div className="flex flex-col gap-1 w-[110px] pt-5">
@@ -430,11 +430,11 @@ export default function App() {
                 {/* Col-8: R32 right (→M102 lower) */}
                 <div className="flex flex-col gap-1 w-[140px] pt-5">
                   <div className="text-[10px] text-slate-400 text-center mb-1 opacity-0">.</div>
-                  {lowerLeft.map(id => <BracketSlotView key={id} id={id} r32={r32} opps={oppLookup[id]} />)}
+                  {lowerLeft.map(id => <BracketSlotView key={id} id={id} r32={r32} opps={oppLookup[id]} preds={preds} />)}
                 </div>
                 <div className="flex flex-col gap-1 w-[140px]">
                   <div className="text-[10px] font-bold text-rose-600 mb-1 px-1">⬇ 下半区 · 1/16决赛</div>
-                  {lowerRight.map(id => <BracketSlotView key={id} id={id} r32={r32} opps={oppLookup[id]} />)}
+                  {lowerRight.map(id => <BracketSlotView key={id} id={id} r32={r32} opps={oppLookup[id]} preds={preds} />)}
                 </div>
                 {/* 3rd Place */}
                 <div className="flex flex-col justify-end w-[90px] ml-1">
@@ -509,21 +509,25 @@ export default function App() {
   );
 }
 
-function BracketSlotView({ id, r32, opps }: { id: string; r32: Record<string, any>; opps?: any[] }) {
+function BracketSlotView({ id, r32, opps, preds }: { id: string; r32: Record<string, any>; opps?: any[]; preds?: Prediction[] }) {
   const s = r32[id];
   const homeCode = s?.slot?.home || '', awayCode = s?.slot?.away || '';
   const homeTeam = s?.homeTeam, awayTeam = s?.awayTeam;
+  // Check if this knockout match has a result
+  const result = preds?.find(p => p.matchId === id && p.predictedBy === 'result');
+  const score = result ? `${result.homeScore}-${result.awayScore}` : null;
   const isFixed = (code: string) => /^[12][A-L]$/.test(code); // 1A-1L or 2A-2L = fixed
   const isThird = (code: string) => code.startsWith('3'); // 3? = uncertain
 
   const SlotLine = ({ code, team }: { code: string; team: string | null }) => {
-    // Fixed slot (1X/2X): show projected team
-    if (isFixed(code)) {
+    // Fixed slot (1X/2X) or determined knockout team: show projected team
+    if (isFixed(code) || team) {
       return (
         <div className="flex items-center gap-1">
           <span className="text-[10px] font-mono text-emerald-600 w-7 shrink-0">{code}</span>
           <span className="text-[10px]">{flag(team||'')}</span>
           <span className="flex-1 truncate text-[11px] text-slate-700">{team || '待定'}</span>
+          {score && <span className="font-mono font-bold text-emerald-700 text-[10px] ml-1">{score}</span>}
         </div>
       );
     }
